@@ -2,6 +2,10 @@
 //Sistemas Operativos II - Practica Linux - Aparcando
 //---------------------------------------------------------------------------
 
+#ifndef PARKING_H //introducidas estas lineas para que no se genere una inclusion infinita para que se pueda compilar el programa
+#define PARKING_H
+
+
 #define NEGRO    0
 #define ROJO     1
 #define VERDE    2
@@ -63,3 +67,5 @@ int PARKING_isAceraOcupada(int algoritmo,int pos);
 
 int PARKING_getTamaNoMemoriaCompartida();
 int PARKING_getNSemAforos();
+
+#endif

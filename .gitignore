@@ -53,3 +53,6 @@ dkms.conf
 
 # debug information files
 *.dwo
+
+#es el ejecutable que se genera cuando se compila el codigo
+parking

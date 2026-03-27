@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 
-gcc -o parking parking.c -m32
+gcc parking.c libparking.a -o parking -lm -m32
