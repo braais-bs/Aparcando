@@ -1,49 +1,111 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/shm.h>
 #include <sys/sem.h>
+#include <sys/msg.h>
 #include "parking.h"
 
-int mi_llegada_prueba(int id) {
-    printf("Coche detectado: %d\n", id);
-    return 0;
-}//fin funcion mi_llegada_prueba
+// variables globales
+int retardo, num_choferes, debug, prio_PA, prio_PD;
+int id_mem = -1, id_sem = -1, id_buzon = -1;  // -1 indica que aun no se crearon
 
-int main() {
-        TIPO_FUNCION_LLEGADA puntero_func = mi_llegada_prueba;
 
-        //creacion de memoria compartida
-        int id_memoria = shmget(1234, 298220, IPC_CREAT | 0666);
-        if (id_memoria == -1) { perror("Error SHM"); return 1; }
+void validar_argumentos(int argc, char *argv[]) {
 
-        //creacion de semaforos
-        //semget(clave, num_semaforos, flags)
-        int id_semaforos = semget(5678, 10, IPC_CREAT | 0666);
-        if (id_semaforos == -1) { perror("Error SEM"); return 1; }
+    if (argc < 3 || argc > 5) {
+        fprintf(stderr, "Error: numero de argumentos incorrecto\n");
+        exit(1);
+    }
 
-        printf("Recursos IPC listos -> SHM ID: %d, SEM ID: %d\n", id_memoria, id_semaforos);
+    retardo = atoi(argv[1]);
+    if (retardo < 0) {
+        fprintf(stderr, "Error: el retardo debe ser >= 0\n");
+        exit(1);
+    }
 
-        //llamadas a la funcion con ambos IDS
-        int resultado = PARKING_inicio(
-                1,              // ret
-                &puntero_func,  // f_llegadasP
-                id_semaforos,   // <--- PASAMOS EL ID DE SEMAFOROS AQUI
-                0,              // buzon
-                id_memoria,     // zona
-                1               // debug
-        );
+    num_choferes = atoi(argv[2]);
+    if (num_choferes <= 0) {
+        fprintf(stderr, "Error: el numero de choferes debe ser > 0\n");
+        exit(1);
+    }
 
-        if (resultado == 0) {
-                printf("¡LOGRADO! PARKING_inicio devolvio 0.\nEsto es solo una prueba para ver si funciona todo bien.\n");
-        }//fin if
+    // argumentos opcionales
+    debug = 0; prio_PA = 0; prio_PD = 0;
 
+    for (int i = 3; i < argc; i++) {
+        if (strcmp(argv[i], "D") == 0) debug = 1;
+        else if (strcmp(argv[i], "PA") == 0) prio_PA = 1;
+        else if (strcmp(argv[i], "PD") == 0) prio_PD = 1;
         else {
-                printf("La funcion devolvio %d.\n", resultado);
-        }//fin else
+            fprintf(stderr, "Error: argumento desconocido '%s'\n", argv[i]);
+            exit(1);
+        }
+    }
 
-        //limpieza de recursos creados
-        shmctl(id_memoria, IPC_RMID, NULL);
-        semctl(id_semaforos, 0, IPC_RMID);
+    if (prio_PA && prio_PD) {
+        fprintf(stderr, "Error: PA y PD no pueden usarse a la vez\n");
+        exit(1);
+    }
 
-        return 0;
-}//fin funcion main
+} //fin funcion validar_argumentos
+
+
+int mi_llegada_prueba(HCoche hc) {
+    printf("Coche detectado\n");
+    return 0;
+} //fin funcion mi_llegada_prueba
+
+
+int main(int argc, char *argv[]) {
+
+    // validar y cargar argumentos en las variables globales
+    validar_argumentos(argc, argv);
+
+
+    //--------------------
+    // Inicializacion
+    //--------------------
+
+    // array de 4 funciones, una por algoritmo (PRIMER, SIGUIENTE, MEJOR, PEOR)
+    TIPO_FUNCION_LLEGADA funciones[4] = {
+        mi_llegada_prueba,
+        mi_llegada_prueba,
+        mi_llegada_prueba,
+        mi_llegada_prueba
+    };
+
+    // obtener tamaño de la memoria compartida y el numero de semaforos
+    int tam  = PARKING_getTamaNoMemoriaCompartida();
+    int nSem = PARKING_getNSemAforos();
+
+    //creacion de la memoria compartida
+    id_mem = shmget(IPC_PRIVATE, tam, IPC_CREAT | 0600);
+    if (id_mem == -1) { perror("shmget"); return 1; }
+
+    //creacion de los semaforos
+    id_sem = semget(IPC_PRIVATE, nSem, IPC_CREAT | 0600);
+    if (id_sem == -1) { perror("semget"); return 1; }
+
+    //creacion del buzon
+    id_buzon = msgget(IPC_PRIVATE, IPC_CREAT | 0600);
+    if (id_buzon == -1) { perror("msgget"); return 1; }
+
+    // iniciar la simulacion con los valores leidos de los argumentos
+    int resultado = PARKING_inicio(retardo, funciones, id_sem, id_buzon, id_mem, debug);
+
+    //===========================================================
+    // PRUEBA PARA VER SI INICIA CORRECTAMENTE
+    if (resultado == 0)
+        printf("PARKING_inicio funciona correctamente\n");
+    else
+        printf("PARKING_inicio devuelve %d, por tanto falló\n", resultado);
+    //===========================================================
+
+    //limpieza de los recursos utilizados
+    shmctl(id_mem, IPC_RMID, NULL);
+    semctl(id_sem, 0, IPC_RMID);
+    msgctl(id_buzon, IPC_RMID, NULL);
+
+    return 0;
+} //fin funcion main
