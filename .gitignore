@@ -56,3 +56,4 @@ dkms.conf
 
 #es el ejecutable que se genera cuando se compila el codigo
 parking
+copyToDocker.sh
