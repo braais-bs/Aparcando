@@ -55,67 +55,65 @@ void ayudaPrograma(char *argv[]){
         printf("\t%s [numero de retardo] [numero de choferes]\n", argv[0]);
 }//fin funcion ayudaPrograma
 
-void validar_argumentos(int argc, char *argv[]) {
+void validar_argumentos(int argc, char *argv[]){
+        if (argc < 3 || argc > 5) {
+                fprintf(stderr, "Error: numero de argumentos incorrecto\n");
+                ayudaPrograma(argv);
+                exit(1);
+        }//fin if
 
-    if (argc < 3 || argc > 5) {
-        fprintf(stderr, "Error: numero de argumentos incorrecto\n");
-        ayudaPrograma(argv);
-        exit(1);
-    }
+        retardo = atoi(argv[1]);
+        if (retardo < 0) {
+                fprintf(stderr, "Error: el retardo debe ser >= 0\n");
+                exit(1);
+        }//fin if
 
-    retardo = atoi(argv[1]);
-    if (retardo < 0) {
-        fprintf(stderr, "Error: el retardo debe ser >= 0\n");
-        exit(1);
-    }
+        num_choferes = atoi(argv[2]);
+        if (num_choferes <= 0){
+                fprintf(stderr, "Error: el numero de choferes debe ser > 0\n");
+                exit(1);
+        }//fin if
 
-    num_choferes = atoi(argv[2]);
-    if (num_choferes <= 0) {
-        fprintf(stderr, "Error: el numero de choferes debe ser > 0\n");
-        exit(1);
-    }
+        // argumentos opcionales
+        debug = 0; prio_PA = 0; prio_PD = 0;
 
-    // argumentos opcionales
-    debug = 0; prio_PA = 0; prio_PD = 0;
+        for (int i = 3; i < argc; i++) {
+                if (strcmp(argv[i], "D") == 0) debug = 1;
+                else if (strcmp(argv[i], "PA") == 0) prio_PA = 1;
+                else if (strcmp(argv[i], "PD") == 0) prio_PD = 1;
+                else {
+                        fprintf(stderr, "Error: argumento desconocido '%s'\n", argv[i]);
+                        exit(1);
+                }//fin else
+        }//fin for
 
-    for (int i = 3; i < argc; i++) {
-        if (strcmp(argv[i], "D") == 0) debug = 1;
-        else if (strcmp(argv[i], "PA") == 0) prio_PA = 1;
-        else if (strcmp(argv[i], "PD") == 0) prio_PD = 1;
-        else {
-            fprintf(stderr, "Error: argumento desconocido '%s'\n", argv[i]);
-            exit(1);
-        }
-    }
-
-    if (prio_PA && prio_PD) {
-        fprintf(stderr, "Error: PA y PD no pueden usarse a la vez\n");
-        exit(1);
-    }
-
-} //fin funcion validar_argumentos
+        if (prio_PA && prio_PD) {
+                fprintf(stderr, "Error: PA y PD no pueden usarse a la vez\n");
+                exit(1);
+        }//fin if
+}//fin funcion validar_argumentos
 
 
 int mi_llegada_prueba(HCoche hc) {
-    printf("Coche detectado\n");
-    return 0;
+        printf("Coche detectado\n");
+        return 0;
 } //fin funcion mi_llegada_prueba
 
 
 void limpiar(void) {
-    if (mem_base != NULL && mem_base != (char *)-1) { 
-        shmdt(mem_base); 
-    }
-    if (id_mem   != -1) { 
-        shmctl(id_mem,   IPC_RMID, NULL); 
-    }
-    if (id_sem   != -1) { 
-        semctl(id_sem, 0, IPC_RMID); 
-    }
-    if (id_buzon != -1) { 
-        msgctl(id_buzon, IPC_RMID, NULL); 
-    }
-} //fin funcion limpiar
+        if (mem_base != NULL && mem_base != (char *)-1) { 
+                shmdt(mem_base); 
+        }//fin if
+        if (id_mem   != -1) { 
+                shmctl(id_mem,   IPC_RMID, NULL); 
+        }//fin if
+        if (id_sem   != -1) { 
+                semctl(id_sem, 0, IPC_RMID); 
+        }//fin if
+        if (id_buzon != -1) { 
+                msgctl(id_buzon, IPC_RMID, NULL); 
+        }//fin if
+}//fin funcion limpiar
 
 void manejar_ctrlc(int signal) {
         terminar = 1; //la funcion de esto es que cuando se ejecute el programa parar los bucles de creacion de los hijos cuando se reciba ctrl-c para limpiar bien los procesos
@@ -133,7 +131,7 @@ void parking(int argcc, char *argvc[]){
         sigaction(SIGINT, &sa_ctrlc, NULL);
         sigaction(SIGTERM, &sa_ctrlc, NULL);
 //        sigaction(SIGUSR1, &sa_usr1, NULL);
-
+ 
         // validar y cargar argumentos en las variables globales
         validar_argumentos(argcc, argvc);
 
@@ -230,6 +228,6 @@ void parking(int argcc, char *argvc[]){
 
 //Luego si se me va te lo dejo aqui por si lo lees yo creo que main deberiamos de vaciarlo porque de main solo tendrian que haber llamadas a fuciones y tal
 int main(int argc, char *argv[]) {
-    parking(argc, argv);
-    return 0;
+        parking(argc, argv);
+        return 0;
 } //fin funcion main
