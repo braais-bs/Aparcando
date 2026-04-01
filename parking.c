@@ -1,3 +1,10 @@
+/*
+  Sistemas Operativos II - Práctica Linux - Aparcando
+  Curso: 2025-2026
+  Práctica Linux de Grupo
+  Autores: Brais Bértolo Senra, Juan Riego Vila
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
