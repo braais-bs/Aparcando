@@ -53,6 +53,7 @@ void manejar_ctrlc(int signal);
 void parking(int argcc, char *argvc[]);
 int main(int argc, char *argv[]);
 
+
 void ayudaPrograma(char *argv[]){
         printf("=====AYUDA PROGRAMA [%s]=====\n",argv[0]);
         printf("Ejemplo uso:\n");
@@ -103,24 +104,20 @@ int primer_ajuste(HCoche hc) {
     return 0;
 }//fin funcion primer_ajuste
 
-
 int siguiente_ajuste(HCoche hc) {
     pause();
     return 0;
 }//fin funcion siguiente_ajuste
-
 
 int mejor_ajuste(HCoche hc) {
     pause();
     return 0;
 }//fin funcion mejor_ajuste
 
-
 int peor_ajuste(HCoche hc) {
     pause();
     return 0;
 }//fin funcion peor_ajuste
-
 
 void limpiar(void) {
         //=======================
