@@ -8,11 +8,12 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <errno.h>
+#include <unistd.h>
 #include "parking.h"
 
 
-#define NUM_SEM_PROPIOS 6
 #define NUM_ALGORITMOS 4
+#define NUM_SEM_PROPIOS (2 + NUM_ALGORITMOS)
 #define TAM_PARKING 80
 
 #define IDX_SEM_CHOFER (nSem + 0)
@@ -43,7 +44,10 @@ MEM_PROPIA *mp = NULL;
 // declaracion de los prototipos de las funciones
 void ayudaPrograma(char *argv[]);
 void validar_argumentos(int argc, char *argv[]);
-int mi_llegada_prueba(HCoche hc);
+int primer_ajuste(HCoche hc);
+int siguiente_ajuste(HCoche hc);
+int mejor_ajuste(HCoche hc);
+int peor_ajuste(HCoche hc);
 void limpiar(void);
 void manejar_ctrlc(int signal);
 void parking(int argcc, char *argvc[]);
@@ -94,13 +98,34 @@ void validar_argumentos(int argc, char *argv[]){
 }//fin funcion validar_argumentos
 
 
-int mi_llegada_prueba(HCoche hc) {
-        printf("Coche detectado\n");
-        return 0;
-} //fin funcion mi_llegada_prueba
+int primer_ajuste(HCoche hc) {
+    pause();
+    return 0;
+}//fin funcion primer_ajuste
+
+
+int siguiente_ajuste(HCoche hc) {
+    pause();
+    return 0;
+}//fin funcion siguiente_ajuste
+
+
+int mejor_ajuste(HCoche hc) {
+    pause();
+    return 0;
+}//fin funcion mejor_ajuste
+
+
+int peor_ajuste(HCoche hc) {
+    pause();
+    return 0;
+}//fin funcion peor_ajuste
 
 
 void limpiar(void) {
+        //=======================
+        if (debug) fprintf(stderr, "[D-IPC] Limpiando recursos\n");
+        //=======================
         if (mem_base != NULL && mem_base != (char *)-1) { 
                 shmdt(mem_base); 
         }//fin if
@@ -116,6 +141,9 @@ void limpiar(void) {
 }//fin funcion limpiar
 
 void manejar_ctrlc(int signal) {
+        //=======================
+        if (debug) fprintf(stderr, "[D-SIG] Señal %d recibida\n", signal);
+        //=======================
         terminar = 1; //la funcion de esto es que cuando se ejecute el programa parar los bucles de creacion de los hijos cuando se reciba ctrl-c para limpiar bien los procesos
         system("tput cnorm"); //esto lo que hace es volver a poner el cursor "normal", ya que cuando se ejecuta el programa a veces el cursor se queda en modo "escondido" esto lo que hace es cambiarle a modo mostar
 }//fin funcion manejar_ctrlc
@@ -142,10 +170,10 @@ void parking(int argcc, char *argvc[]){
 
         // array de 4 funciones, una por algoritmo (PRIMER, SIGUIENTE, MEJOR, PEOR)
         TIPO_FUNCION_LLEGADA funciones[4] = {
-                mi_llegada_prueba,
-                mi_llegada_prueba,
-                mi_llegada_prueba,
-                mi_llegada_prueba
+                primer_ajuste,
+                siguiente_ajuste,
+                mejor_ajuste,
+                peor_ajuste
         };
 
         // obtener tamaño de la memoria compartida y el numero de semaforos
@@ -208,15 +236,14 @@ void parking(int argcc, char *argvc[]){
         int resultado = PARKING_inicio(retardo, funciones, id_sem, id_buzon, id_mem, debug);
 
         //===========================================================
-        // Ejecutar con D para que se vea, o con d 2>debug.txt para guardar el debug en un txt en lugar de verlo por pantalla (solo el stderr)
         if (debug) {
-                fprintf(stderr, "[MAIN] IPC creados -> SHM:%d SEM:%d MSG:%d\n", id_mem, id_sem, id_buzon);
-                // PRUEBA PARA VER SI INICIA CORRECTAMENTE
+                fprintf(stderr, "[D-IPC] IPC creados -> SHM:%d SEM:%d MSG:%d\n", id_mem, id_sem, id_buzon);
+                fprintf(stderr, "[D-PKG] PARKING_inicio retornó: %d\n", resultado);
                 if (resultado == 0) {
-                        printf("PARKING_inicio funciona correctamente\n");
+                        fprintf(stderr, "[D-PKG] PARKING_inicio funciona correctamente\n");
                 }//fin if
                 else {
-                        printf("PARKING_inicio devuelve %d, por tanto falló\n", resultado);
+                        fprintf(stderr, "[D-PKG] PARKING_inicio falló\n", resultado);
                 }//fin else
         }//fin fi
         //===========================================================
