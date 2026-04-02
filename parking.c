@@ -100,30 +100,25 @@ void validar_argumentos(int argc, char *argv[]){
     }
 }//fin funcion validar_argumentos
 
-
 int primer_ajuste(HCoche hc) {
     pause();
     return 0;
 }//fin funcion primer_ajuste
-
 
 int siguiente_ajuste(HCoche hc) {
     pause();
     return 0;
 }//fin funcion siguiente_ajuste
 
-
 int mejor_ajuste(HCoche hc) {
     pause();
     return 0;
 }//fin funcion mejor_ajuste
 
-
 int peor_ajuste(HCoche hc) {
     pause();
     return 0;
 }//fin funcion peor_ajuste
-
 
 void limpiar(void) {
     //=======================
@@ -166,7 +161,7 @@ void parking(int argcc, char *argvc[]){
     // validar y cargar argumentos en las variables globales
     validar_argumentos(argcc, argvc);
 
-
+    
     //--------------------
     // Inicializacion
     //--------------------
