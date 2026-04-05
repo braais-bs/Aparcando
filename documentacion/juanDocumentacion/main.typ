@@ -105,4 +105,11 @@ Y luego he introducido una parte del código que llama a 'system' mediante la li
 ]
 #pagebreak()
 
+= Cambios realizados el dia 05 de Abril de 2026
+== todos los cambios han sido realizados sobre el punto 5 del trabajo
+=== Hora: *13:11* cambios documentados:
+Introducido un programa llamado `ejecutarRedirigiendoSalidaErrores.sh` el cual permite redirigir todos los errores a un archivo llamado 'errores.txt' como forma predeterminada este archivo es excluido mediante el archivo `.gitignore` para que no suba a Github permitiendo que este más limpio el repositiorio.
+
+
+
 //>End of the paper
