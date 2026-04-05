@@ -160,7 +160,7 @@ int main(int argc, char *argv[]) {
 //        sigaction(SIGUSR1, &sa_usr1, NULL);
  
     // validar y cargar argumentos en las variables globales
-    validar_argumentos(argcc, argvc);
+    validar_argumentos(argc, argv);
 
     
     //--------------------
