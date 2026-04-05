@@ -146,7 +146,8 @@ void manejar_ctrlc(int signal) {
     system("tput cnorm"); //esto lo que hace es volver a poner el cursor "normal", ya que cuando se ejecuta el programa a veces el cursor se queda en modo "escondido" esto lo que hace es cambiarle a modo mostar
 }//fin funcion manejar_ctrlc
 
-void parking(int argcc, char *argvc[]){
+//Luego si se me va te lo dejo aqui por si lo lees yo creo que main deberiamos de vaciarlo porque de main solo tendrian que haber llamadas a fuciones y tal
+int main(int argc, char *argv[]) {
     //configurar sennales
 //        struct sigaction sa_ctrlc, sa_usr1; //FIXME: Esto lo he cogido de un codigo mio lo tengo que agregar si es necesario por ahora dejemoslo asi para que no de error, todos los que tengo la sa_usr1 es lo mismo por eso estan comentados
     struct sigaction sa_ctrlc;
@@ -249,10 +250,6 @@ void parking(int argcc, char *argvc[]){
     //limpieza de los recursos utilizados
     limpiar();
     system("tput cnorm"); //esto lo que hace es volver a poner el cursor "normal", ya que cuando se ejecuta el programa a veces el cursor se queda en modo "escondido" esto lo que hace es cambiarle a modo mostar
-}//fin funcion parkin
 
-//Luego si se me va te lo dejo aqui por si lo lees yo creo que main deberiamos de vaciarlo porque de main solo tendrian que haber llamadas a fuciones y tal
-int main(int argc, char *argv[]) {
-    parking(argc, argv);
     return 0;
 } //fin funcion main
