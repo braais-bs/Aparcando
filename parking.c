@@ -156,6 +156,42 @@ void manejar_ctrlc(int signal) {
         system("tput cnorm"); //esto lo que hace es volver a poner el cursor "normal", ya que cuando se ejecuta el programa a veces el cursor se queda en modo "escondido" esto lo que hace es cambiarle a modo mostar
 }//fin funcion manejar_ctrlc
 
+void funcionEjercicio3(int argcc, char *argvc[]){// argcc -> argc copy | argvc -> argv copy
+        if(argcc != 2) {
+                fprintf(stderr,"\nPara usar el programa debes introducir el numero de procesos como entero...\n");
+                fprintf(stderr,"\n...despues de la ejecucion del ejecutable.\n");
+                fprintf(stderr,"\n>>\t$ %s ENTERO\n",argvc[0]);
+                exit(1);
+        }//fin if
+
+        int TamProcess = atoi(argvc[1]);
+        if (TamProcess < 5 || TamProcess > 30) { //comprueba el valor de entrada dentro de un rango
+                fprintf(stderr,"El numero entero introducido tiene que ser mayor de 5 y menor de 30\n");
+                exit(1);
+        }//fin if
+
+        for(int i = 0; i < TamProcess; i++) {
+                pid_t pid = fork(); // creacion de procesos
+
+                if(pid < 0) { //si el numero de procesos es menor a 0
+                        fprintf(stderr,"Error en la creacion del proceso hijo");
+                        exit(1);
+                }//fin if
+                else if(pid == 0) { //si el numero de procesos es igual a 0
+                        // proceso hijo
+                        printf("Proceso hijo numero %d, mi ProcessID es %d\n", i + 1, getpid());
+                        sleep(1);
+                        exit(i + 1);
+                }//fin else if
+                else { //si no 
+                        //proceso padre
+                        int status;
+                        waitpid(pid, &status, 0);
+                        printf("El proceso hijo numero %d que tiene ProcessID=%d ha finalizado en estado %d\n", i + 1, pid, WEXITSTATUS(status));
+                }//fin else
+        }//fin funcion main
+}//fin funcion funcionEjercicio3
+
 //Luego si se me va te lo dejo aqui por si lo lees yo creo que main deberiamos de vaciarlo porque de main solo tendrian que haber llamadas a fuciones y tal
 int main(int argc, char *argv[]) {
         //configurar sennales
@@ -257,9 +293,21 @@ int main(int argc, char *argv[]) {
         }//fin if
         //===========================================================
 
+        PARKING_simulaciOn();// llamada a esta funcion desde el proceso padre, definicion funcion al final del codigo
+
         //limpieza de los recursos utilizados
         limpiar();
         system("tput cnorm"); //esto lo que hace es volver a poner el cursor "normal", ya que cuando se ejecuta el programa a veces el cursor se queda en modo "escondido" esto lo que hace es cambiarle a modo mostar
 
         return 0;
 } //fin funcion main
+
+//========================================Definiciones funciones en el codigo========================================
+/*
+int PARKING_simulaciOn();
+        El proceso padre debe llamar a esta función después de haber iniciado todo lo necesario para que 
+        la simulación se lleve a cabo. Permanecerá dentro de la función hasta que la simulación acabe. No 
+        obstante,  la  simulación  no  acabará  en  una  ejecución  normal  hasta  que  todos  los  coches 
+        pendientes de desaparcar se hayan ido.
+*
+/
