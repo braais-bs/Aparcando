@@ -111,23 +111,19 @@ void validar_argumentos(int argc, char *argv[]){
 }//fin funcion validar_argumentos
 
 int primer_ajuste(HCoche hc) {
-        pause();
         return 0;
 }//fin funcion primer_ajuste
 
 int siguiente_ajuste(HCoche hc) {
-        pause();
-        return 0;
+        return -2; // de momento no queremos que funcione
 }//fin funcion siguiente_ajuste
 
 int mejor_ajuste(HCoche hc) {
-        pause();
-        return 0;
+        return -2; // de momento no queremos que funcione
 }//fin funcion mejor_ajuste
 
 int peor_ajuste(HCoche hc) {
-        pause();
-        return 0;
+        return -2; // de momento no queremos que funcione
 }//fin funcion peor_ajuste
 
 void limpiar(void) {
@@ -156,41 +152,6 @@ void manejar_ctrlc(int signal) {
         system("tput cnorm"); //esto lo que hace es volver a poner el cursor "normal", ya que cuando se ejecuta el programa a veces el cursor se queda en modo "escondido" esto lo que hace es cambiarle a modo mostar
 }//fin funcion manejar_ctrlc
 
-void funcionEjercicio3(int argcc, char *argvc[]){// argcc -> argc copy | argvc -> argv copy
-        if(argcc != 2) {
-                fprintf(stderr,"\nPara usar el programa debes introducir el numero de procesos como entero...\n");
-                fprintf(stderr,"\n...despues de la ejecucion del ejecutable.\n");
-                fprintf(stderr,"\n>>\t$ %s ENTERO\n",argvc[0]);
-                exit(1);
-        }//fin if
-
-        int TamProcess = atoi(argvc[1]);
-        if (TamProcess < 5 || TamProcess > 30) { //comprueba el valor de entrada dentro de un rango
-                fprintf(stderr,"El numero entero introducido tiene que ser mayor de 5 y menor de 30\n");
-                exit(1);
-        }//fin if
-
-        for(int i = 0; i < TamProcess; i++) {
-                pid_t pid = fork(); // creacion de procesos
-
-                if(pid < 0) { //si el numero de procesos es menor a 0
-                        fprintf(stderr,"Error en la creacion del proceso hijo");
-                        exit(1);
-                }//fin if
-                else if(pid == 0) { //si el numero de procesos es igual a 0
-                        // proceso hijo
-                        printf("Proceso hijo numero %d, mi ProcessID es %d\n", i + 1, getpid());
-                        sleep(1);
-                        exit(i + 1);
-                }//fin else if
-                else { //si no 
-                        //proceso padre
-                        int status;
-                        waitpid(pid, &status, 0);
-                        printf("El proceso hijo numero %d que tiene ProcessID=%d ha finalizado en estado %d\n", i + 1, pid, WEXITSTATUS(status));
-                }//fin else
-        }//fin funcion main
-}//fin funcion funcionEjercicio3
 
 //Luego si se me va te lo dejo aqui por si lo lees yo creo que main deberiamos de vaciarlo porque de main solo tendrian que haber llamadas a fuciones y tal
 int main(int argc, char *argv[]) {
@@ -293,6 +254,33 @@ int main(int argc, char *argv[]) {
         }//fin if
         //===========================================================
 
+        // creación del proceso chofer
+        pid_t pid_chofer = fork();
+
+        // fallo en fork (creacion del proceso hijo)
+        if (pid_chofer < 0) {
+                perror("fork chofer");
+                limpiar();
+                exit(1);
+        }//fin if
+
+        // fork creó el proceso hijo
+        if (pid_chofer == 0) {
+                // el hijo ignora SIGINT, solo muere cuando el buzon desaparece
+                signal(SIGINT, SIG_IGN);
+                struct PARKING_mensajeBiblioteca msg;
+
+                while (1) { 
+                        // si el buzon se limpia y msgrcv falla, salimos
+                        if (msgrcv(id_buzon, &msg, sizeof(msg) - sizeof(long), 0, 0) == -1) {
+                                break;
+                        }//fin if
+                        // imprime lo que ha llegado
+                        printf("[CHOFER] tipo=%ld subtipo=%ld coche=%d\n", msg.tipo, msg.subtipo, msg.hCoche);
+                }//fin while
+
+        }//fin if
+
         PARKING_simulaciOn();// llamada a esta funcion desde el proceso padre, definicion funcion al final del codigo
 
         //limpieza de los recursos utilizados
@@ -309,5 +297,4 @@ int PARKING_simulaciOn();
         la simulación se lleve a cabo. Permanecerá dentro de la función hasta que la simulación acabe. No 
         obstante,  la  simulación  no  acabará  en  una  ejecución  normal  hasta  que  todos  los  coches 
         pendientes de desaparcar se hayan ido.
-*
-/
+*/
