@@ -278,7 +278,7 @@ int main(int argc, char *argv[]) {
                         // imprime lo que ha llegado
                         printf("[CHOFER] tipo=%ld subtipo=%ld coche=%d\n", msg.tipo, msg.subtipo, msg.hCoche);
                 }//fin while
-
+                exit(0);
         }//fin if
 
         PARKING_simulaciOn();// llamada a esta funcion desde el proceso padre, definicion funcion al final del codigo
