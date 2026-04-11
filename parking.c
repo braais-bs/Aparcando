@@ -278,6 +278,7 @@ int main(int argc, char *argv[]) {
                         // imprime lo que ha llegado
                         printf("[CHOFER] tipo=%ld subtipo=%ld coche=%d\n", msg.tipo, msg.subtipo, msg.hCoche);
                 }//fin while
+                if (debug) fprintf(stderr, "[D-CHOFER] PID=%d muriendo\n", getpid());
                 exit(0);
         }//fin if
 
@@ -286,6 +287,17 @@ int main(int argc, char *argv[]) {
         //limpieza de los recursos utilizados
         limpiar();
         system("tput cnorm"); //esto lo que hace es volver a poner el cursor "normal", ya que cuando se ejecuta el programa a veces el cursor se queda en modo "escondido" esto lo que hace es cambiarle a modo mostar
+
+        // esperar a que todos los hijos terminen antes de que el padre muera
+        int status;
+        pid_t pid_muerto;
+        // esto luego seria mas sencillo pero para el mensaje de debug es necesario
+        while ((pid_muerto = wait(&status)) > 0) {
+                if (debug) fprintf(stderr, "[D-PADRE] Hijo PID=%d recogido, exit=%d\n",
+                                pid_muerto, WEXITSTATUS(status));
+        }
+
+        if (debug) fprintf(stderr, "[D-PADRE] PID=%d muriendo\n", getpid());
 
         return 0;
 } //fin funcion main
