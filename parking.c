@@ -152,6 +152,26 @@ void manejar_ctrlc(int signal) {
         system("tput cnorm"); //esto lo que hace es volver a poner el cursor "normal", ya que cuando se ejecuta el programa a veces el cursor se queda en modo "escondido" esto lo que hace es cambiarle a modo mostar
 }//fin funcion manejar_ctrlc
 
+//-=-=-=-=-=-=-=-=-=-=- Funciones de Rellamada (Callbacks), para el apartado 8 -=-=-=-=-=-=-=-=-=-=-
+
+//se ejecuta cuando la biblioteca confirma que el coche ha aparcado
+void aparcar_commit(HCoche hc) {
+        if (debug) printf("[DEBUG] Coche %d aparcado en algoritmo [no implementado] (Commit)\n", hc);
+        //aqui es donde levantarias el semaforo para el siguiente coche (mp->proxaparcar)
+        //semop(id_sem, ...);
+}//fin funcion aparcar_commit
+
+//se ejecuta cuando el coche quiere moverse. debe bloquearse hasta que sea seguro
+void permiso_avance(HCoche hc) {
+        if (debug) printf("[DEBUG] Coche %d pidiendo permiso para avanzar...\n", hc);
+        //De momento como dice el enunciado solo mensaje
+        //en una version final aqui se usarian semaforos para evitar colisiones
+}//fin funcion permiso_avance
+
+void permiso_avance_commit(HCoche hc) {
+        if (debug) printf("[DEBUG] Coche %d ha avanzado con éxito.\n", hc);
+}//fin funcion mi_permiso_avance_commit
+
 
 //Luego si se me va te lo dejo aqui por si lo lees yo creo que main deberiamos de vaciarlo porque de main solo tendrian que haber llamadas a fuciones y tal
 int main(int argc, char *argv[]) {
@@ -270,7 +290,13 @@ int main(int argc, char *argv[]) {
                 signal(SIGINT, SIG_IGN);
                 struct PARKING_mensajeBiblioteca msg;
 
-                while (1) { 
+                /*hay que pasar la informacion a los callbacks (como
+                    por ejemplo el algoritmo que sea), utilizo una
+                    variable para pasarla por el puntero void *datos.
+                */
+                int alg_aux;
+
+                while (1) {
                         // si el buzon se limpia y msgrcv falla, salimos
                         if (msgrcv(id_buzon, &msg, sizeof(msg) - sizeof(long), 0, 0) == -1) {
                                 break;
@@ -279,6 +305,18 @@ int main(int argc, char *argv[]) {
                         printf("[CHOFER] tipo=%ld subtipo=%ld coche=%d\n", msg.tipo, msg.subtipo, msg.hCoche);
                 }//fin while
                 if (debug) fprintf(stderr, "[D-CHOFER] PID=%d muriendo\n", getpid());
+
+                //subtipo para representar el indice del algoritmo (0 a 3)
+                alg_aux = (int)msg.subtipo;
+
+                PARKING_aparcar(
+                        msg.hCoche,               // el manejador del coche recibido
+                        &alg_aux,                 // datos que llegan a los callbacks
+                        aparcar_commit,           // funcion de confirmacion de aparcado
+                        permiso_avance,           // funcion de control de trafico
+                        permiso_avance_commit     // funcion de confirmacion de movimiento
+                );//fin PARKING_aparcar
+
                 exit(0);
         }//fin if
 
