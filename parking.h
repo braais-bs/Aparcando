@@ -32,7 +32,7 @@ struct PARKING_mensajeBiblioteca {
   long   subtipo;
   HCoche hCoche;
 };
-  
+
 typedef int  (*TIPO_FUNCION_LLEGADA)(HCoche hc);
 typedef int  (*TIPO_FUNCION_SALIDA)(HCoche hc);
 typedef void (*TIPO_FUNCION_APARCAR_COMMIT)(HCoche hc);

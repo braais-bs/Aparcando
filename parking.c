@@ -156,20 +156,20 @@ void manejar_ctrlc(int signal) {
 
 //se ejecuta cuando la biblioteca confirma que el coche ha aparcado
 void aparcar_commit(HCoche hc) {
-        if (debug) printf("[DEBUG] Coche %d aparcado en algoritmo [no implementado] (Commit)\n", hc);
+        if (debug) fprintf(stderr, "[D-PKG:aparcar_commit] Coche %d aparcado en algoritmo [no implementado] (Commit)\n", hc);
         //aqui es donde levantarias el semaforo para el siguiente coche (mp->proxaparcar)
         //semop(id_sem, ...);
 }//fin funcion aparcar_commit
 
 //se ejecuta cuando el coche quiere moverse. debe bloquearse hasta que sea seguro
 void permiso_avance(HCoche hc) {
-        if (debug) printf("[DEBUG] Coche %d pidiendo permiso para avanzar...\n", hc);
+        if (debug) fprintf(stderr, "[D-PKG:permiso_avance] Coche %d pidiendo permiso para avanzar...\n", hc);
         //De momento como dice el enunciado solo mensaje
         //en una version final aqui se usarian semaforos para evitar colisiones
 }//fin funcion permiso_avance
 
 void permiso_avance_commit(HCoche hc) {
-        if (debug) printf("[DEBUG] Coche %d ha avanzado con éxito.\n", hc);
+        if (debug) fprintf(stderr, "[D-PKG:permiso_avance_commit] Coche %d ha avanzado con éxito.\n", hc);
 }//fin funcion mi_permiso_avance_commit
 
 
@@ -289,33 +289,49 @@ int main(int argc, char *argv[]) {
                 // el hijo ignora SIGINT, solo muere cuando el buzon desaparece
                 signal(SIGINT, SIG_IGN);
                 struct PARKING_mensajeBiblioteca msg;
+                int alg_aux;
+
 
                 /*hay que pasar la informacion a los callbacks (como
                     por ejemplo el algoritmo que sea), utilizo una
                     variable para pasarla por el puntero void *datos.
                 */
-                int alg_aux;
-
                 while (1) {
                         // si el buzon se limpia y msgrcv falla, salimos
                         if (msgrcv(id_buzon, &msg, sizeof(msg) - sizeof(long), 0, 0) == -1) {
                                 break;
                         }//fin if
-                        // imprime lo que ha llegado
-                        printf("[CHOFER] tipo=%ld subtipo=%ld coche=%d\n", msg.tipo, msg.subtipo, msg.hCoche);
+                        // imprime lo que llegó
+                        if (debug) fprintf(stderr, "[D-CHOFER] tipo=%ld subtipo=%ld coche=%d\n", msg.tipo, msg.subtipo, msg.hCoche);
+
+                        //subtipo para representar el indice del algoritmo (0 a 3) 
+                        //NOTA BRAIS: EN el .h pone int PARKING_getAlgoritmo(HCoche), no se si ira aqui
+                        alg_aux = (int)msg.subtipo;
+
+                        if (msg.subtipo == PARKING_MSGSUB_APARCAR) {
+                                //==========================
+                                if (debug) fprintf(stderr, "[D-CHOFER: aparcar] PID=%d -> Coche %d va a aparcar\n", getpid(), msg.hCoche);
+                                //==========================
+                                PARKING_aparcar(
+                                        msg.hCoche,
+                                        &alg_aux,
+                                        aparcar_commit,
+                                        permiso_avance,
+                                        permiso_avance_commit
+                                );
+                        } else if (msg.subtipo == PARKING_MSGSUB_DESAPARCAR) {
+                                //==========================
+                                if (debug) fprintf(stderr, "[D-CHOFER: desaparcar] PID=%d -> Coche %d va a desaparcar\n", getpid(), msg.hCoche);
+                                //==========================
+                                PARKING_desaparcar(
+                                        msg.hCoche,
+                                        &alg_aux,
+                                        permiso_avance,
+                                        permiso_avance_commit
+                                );
+                        }//fin else if
                 }//fin while
                 if (debug) fprintf(stderr, "[D-CHOFER] PID=%d muriendo\n", getpid());
-
-                //subtipo para representar el indice del algoritmo (0 a 3)
-                alg_aux = (int)msg.subtipo;
-
-                PARKING_aparcar(
-                        msg.hCoche,               // el manejador del coche recibido
-                        &alg_aux,                 // datos que llegan a los callbacks
-                        aparcar_commit,           // funcion de confirmacion de aparcado
-                        permiso_avance,           // funcion de control de trafico
-                        permiso_avance_commit     // funcion de confirmacion de movimiento
-                );//fin PARKING_aparcar
 
                 exit(0);
         }//fin if
