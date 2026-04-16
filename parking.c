@@ -305,7 +305,7 @@ int main(int argc, char *argv[]) {
                         if (debug) fprintf(stderr, "[D-CHOFER] tipo=%ld subtipo=%ld coche=%d\n", msg.tipo, msg.subtipo, msg.hCoche);
 
                         //subtipo para representar el indice del algoritmo (0 a 3) 
-                        //NOTA BRAIS: EN el .h pone int PARKING_getAlgoritmo(HCoche), no se si ira aqui
+                        //NOTA BRAIS: EN el .h hay un int PARKING_getAlgoritmo(HCoche), por el nombre te diria que va aqui, no se con lo que tu tienes si también va, lo comento por que estuve mirando el .h
                         alg_aux = (int)msg.subtipo;
 
                         if (msg.subtipo == PARKING_MSGSUB_APARCAR) {
