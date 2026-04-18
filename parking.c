@@ -57,12 +57,13 @@ int mejor_ajuste(HCoche hc);
 int peor_ajuste(HCoche hc);
 void limpiar(void);
 void manejar_ctrlc(int signal);
-int main(int argc, char *argv[]);
 void parking();
 void inicializar_semaforos();
 void inicializacion_buzones();
 void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[]);
+void crear_chofer();
 void finalizar_simulacion();
+int main(int argc, char *argv[]);
 
 void ayudaPrograma(char *argv[]){
         printf("=====AYUDA PROGRAMA [%s]=====\n",argv[0]);
@@ -177,27 +178,6 @@ void permiso_avance_commit(HCoche hc) {
 }//fin funcion mi_permiso_avance_commit
 
 
-//Luego si se me va te lo dejo aqui por si lo lees yo creo que main deberiamos de vaciarlo porque de main solo tendrian que haber llamadas a fuciones y tal
-int main(int argc, char *argv[]) {
-        //configurar sennales
-    //        struct sigaction sa_ctrlc, sa_usr1; //FIXME: Esto lo he cogido de un codigo mio lo tengo que agregar si es necesario por ahora dejemoslo asi para que no de error, todos los que tengo la sa_usr1 es lo mismo por eso estan comentados
-        struct sigaction sa_ctrlc;
-        memset(&sa_ctrlc, 0, sizeof(sa_ctrlc));
-    //        memset(&sa_usr1, 0, sizeof(sa_usr1));
-        sa_ctrlc.sa_handler = manejar_ctrlc;
-    //        sa_usr1.sa_handler = manejar_usr1;
-        sigaction(SIGINT, &sa_ctrlc, NULL);
-        sigaction(SIGTERM, &sa_ctrlc, NULL);
-    //        sigaction(SIGUSR1, &sa_usr1, NULL);
-
-        // validar y cargar argumentos en las variables globales
-        validar_argumentos(argc, argv);
-
-        parking();
-        return 0;
-} //fin funcion main
-
-
 void parking(){
         //--------------------
         // Inicializacion
@@ -299,6 +279,12 @@ void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[]){
         }//fin if
         //===========================================================
 
+        crear_chofer();
+
+        PARKING_simulaciOn();// llamada a esta funcion desde el proceso padre, definicion funcion al final del codigo
+}//fin funcion inicializar_simulacion
+
+void crear_chofer(){
         // creación del proceso chofer
         pid_t pid_chofer = fork();
 
@@ -360,10 +346,7 @@ void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[]){
 
                 exit(0);
         }//fin if
-
-        PARKING_simulaciOn();// llamada a esta funcion desde el proceso padre, definicion funcion al final del codigo
-
-}//fin funcion inicializar_simulacion
+}//fin funcion crear_chofer
 
 void finalizar_simulacion(){
         // esperar a que todos los hijos terminen antes de que el padre muera
@@ -373,10 +356,30 @@ void finalizar_simulacion(){
         while ((pid_muerto = wait(&status)) > 0) {
                 if (debug) fprintf(stderr, "[D-PADRE] Hijo PID=%d recogido, exit=%d\n",
                                 pid_muerto, WEXITSTATUS(status));
-        }
+        }//fin while
 
         if (debug) fprintf(stderr, "[D-PADRE] PID=%d muriendo\n", getpid());
 }//fin funcion finalizar_simulacion
+
+//Luego si se me va te lo dejo aqui por si lo lees yo creo que main deberiamos de vaciarlo porque de main solo tendrian que haber llamadas a fuciones y tal
+int main(int argc, char *argv[]) {
+        //configurar sennales
+    //        struct sigaction sa_ctrlc, sa_usr1; //FIXME: Esto lo he cogido de un codigo mio lo tengo que agregar si es necesario por ahora dejemoslo asi para que no de error, todos los que tengo la sa_usr1 es lo mismo por eso estan comentados
+        struct sigaction sa_ctrlc;
+        memset(&sa_ctrlc, 0, sizeof(sa_ctrlc));
+    //        memset(&sa_usr1, 0, sizeof(sa_usr1));
+        sa_ctrlc.sa_handler = manejar_ctrlc;
+    //        sa_usr1.sa_handler = manejar_usr1;
+        sigaction(SIGINT, &sa_ctrlc, NULL);
+        sigaction(SIGTERM, &sa_ctrlc, NULL);
+    //        sigaction(SIGUSR1, &sa_usr1, NULL);
+
+        // validar y cargar argumentos en las variables globales
+        validar_argumentos(argc, argv);
+
+        parking();
+        return 0;
+} //fin funcion main
 
 //========================================Definiciones funciones en el codigo========================================
 /*
