@@ -57,11 +57,12 @@ int mejor_ajuste(HCoche hc);
 int peor_ajuste(HCoche hc);
 void limpiar(void);
 void manejar_ctrlc(int signal);
-void parking(int numChoferes);
+void parking();
+void inicializar_memoria_compartida();
 void inicializar_semaforos();
 void inicializacion_buzones();
 void crear_chofer();
-void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[], int numChoferes);
+void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[]);
 void finalizar_simulacion();
 int main(int argc, char *argv[]);
 
@@ -178,7 +179,7 @@ void permiso_avance_commit(HCoche hc) {
 }//fin funcion mi_permiso_avance_commit
 
 
-void parking(int numChoferes){
+void parking(){
         // array de 4 funciones, una por algoritmo (PRIMER, SIGUIENTE, MEJOR, PEOR)
         TIPO_FUNCION_LLEGADA funciones[4] = {
                 primer_ajuste,
@@ -187,9 +188,24 @@ void parking(int numChoferes){
                 peor_ajuste
         };
 
-        // obtener tamaño de la memoria compartida y el numero de semaforos
-        tam  = PARKING_getTamaNoMemoriaCompartida();
-        nSem = PARKING_getNSemAforos();
+        //creacion de la memoria compartida
+        inicializar_memoria_compartida();
+
+        // creacion e inicializacion de los semaforos
+        inicializar_semaforos();
+
+        //creacion del buzon
+        inicializacion_buzones();
+
+        // iniciar la simulacion con los valores leidos de los argumentos
+        inicializar_simulacion(funciones);
+
+        finalizar_simulacion();
+}//fin funcion parking
+
+void inicializar_memoria_compartida(){
+        // obtener tamaño de la memoria compartida
+        tam = PARKING_getTamaNoMemoriaCompartida();
 
         //creacion de la memoria compartida
         id_mem = shmget(IPC_PRIVATE, tam + sizeof(MEM_PROPIA), IPC_CREAT | 0600);
@@ -214,25 +230,13 @@ void parking(int numChoferes){
         // el primer coche en aparcar en cada algoritmo es el numero 1
         for (int i = 0; i < NUM_ALGORITMOS; i++) {
                 mp->proxAparcar[i] = 1;
-        }//fin for
-
-        // creacion e inicializacion de los semaforos
-        inicializar_semaforos();
-
-        //creacion del buzon
-        inicializacion_buzones();
-
-        // iniciar la simulacion con los valores leidos de los argumentos
-        inicializar_simulacion(funciones, numChoferes);
-
-        //limpieza de los recursos utilizados
-        limpiar();
-        system("tput cnorm"); //esto lo que hace es volver a poner el cursor "normal", ya que cuando se ejecuta el programa a veces el cursor se queda en modo "escondido" esto lo que hace es cambiarle a modo mostar
-
-        finalizar_simulacion();
-}//fin funcion parking
+        }//fin for       
+}
 
 void inicializar_semaforos(){
+        // obtener numero de semaforos
+        nSem = PARKING_getNSemAforos();
+
         //creacion de los semaforos
         id_sem = semget(IPC_PRIVATE, nSem + NUM_SEM_PROPIOS, IPC_CREAT | 0600);
         if (id_sem == -1) {
@@ -274,56 +278,58 @@ void crear_chofer(){
         if (pid_chofer == 0) {
                 // el hijo ignora SIGINT, solo muere cuando el buzon desaparece
                 signal(SIGINT, SIG_IGN);
-                struct PARKING_mensajeBiblioteca msg;
-                int alg_aux;
-
-
-                /*hay que pasar la informacion a los callbacks (como
-                    por ejemplo el algoritmo que sea), utilizo una
-                    variable para pasarla por el puntero void *datos.
-                */
-                while (1) {
-                        // si el buzon se limpia y msgrcv falla, salimos
-                        if (msgrcv(id_buzon, &msg, sizeof(msg) - sizeof(long), 0, 0) == -1) {
-                                break;
-                        }//fin if
-                        // imprime lo que llegó
-                        if (debug) fprintf(stderr, "[D-CHOFER] tipo=%ld subtipo=%ld coche=%d\n", msg.tipo, msg.subtipo, msg.hCoche);
-
-                        //subtipo para representar el indice del algoritmo (0 a 3) 
-                        //NOTA BRAIS: EN el .h hay un int PARKING_getAlgoritmo(HCoche), por el nombre te diria que va aqui, no se con lo que tu tienes si también va, lo comento por que estuve mirando el .h
-                        alg_aux = (int)msg.subtipo;
-
-                        if (msg.subtipo == PARKING_MSGSUB_APARCAR) {
-                                //==========================
-                                if (debug) fprintf(stderr, "[D-CHOFER: aparcar] PID=%d -> Coche %d va a aparcar\n", getpid(), msg.hCoche);
-                                //==========================
-                                PARKING_aparcar(
-                                        msg.hCoche,
-                                        &alg_aux,
-                                        aparcar_commit,
-                                        permiso_avance,
-                                        permiso_avance_commit
-                                );
-                        } else if (msg.subtipo == PARKING_MSGSUB_DESAPARCAR) {
-                                //==========================
-                                if (debug) fprintf(stderr, "[D-CHOFER: desaparcar] PID=%d -> Coche %d va a desaparcar\n", getpid(), msg.hCoche);
-                                //==========================
-                                PARKING_desaparcar(
-                                        msg.hCoche,
-                                        &alg_aux,
-                                        permiso_avance,
-                                        permiso_avance_commit
-                                );
-                        }//fin else if
-                }//fin while
+                bucle_chofer();
                 if (debug) fprintf(stderr, "[D-CHOFER] PID=%d muriendo\n", getpid());
-
                 exit(0);
         }//fin if
 }//fin funcion crear_chofer
 
-void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[], int numChoferes){
+bucle_chofer(){
+        struct PARKING_mensajeBiblioteca msg;
+        int alg_aux;
+
+        /*hay que pasar la informacion a los callbacks (como
+            por ejemplo el algoritmo que sea), utilizo una
+            variable para pasarla por el puntero void *datos.
+        */
+        while (1) {
+                // si el buzon se limpia y msgrcv falla, salimos
+                if (msgrcv(id_buzon, &msg, sizeof(msg) - sizeof(long), 0, 0) == -1) {
+                        break;
+                }//fin if
+                // imprime lo que llegó
+                if (debug) fprintf(stderr, "[D-CHOFER] tipo=%ld subtipo=%ld coche=%d\n", msg.tipo, msg.subtipo, msg.hCoche);
+
+                //subtipo para representar el indice del algoritmo (0 a 3) 
+                //NOTA BRAIS: EN el .h hay un int PARKING_getAlgoritmo(HCoche), por el nombre te diria que va aqui, no se con lo que tu tienes si también va, lo comento por que estuve mirando el .h
+                alg_aux = (int)msg.subtipo;
+
+                if (msg.subtipo == PARKING_MSGSUB_APARCAR) {
+                        //==========================
+                        if (debug) fprintf(stderr, "[D-CHOFER: aparcar] PID=%d -> Coche %d va a aparcar\n", getpid(), msg.hCoche);
+                        //==========================
+                        PARKING_aparcar(
+                                msg.hCoche,
+                                &alg_aux,
+                                aparcar_commit,
+                                permiso_avance,
+                                permiso_avance_commit
+                        );
+                } else if (msg.subtipo == PARKING_MSGSUB_DESAPARCAR) {
+                        //==========================
+                        if (debug) fprintf(stderr, "[D-CHOFER: desaparcar] PID=%d -> Coche %d va a desaparcar\n", getpid(), msg.hCoche);
+                        //==========================
+                        PARKING_desaparcar(
+                                msg.hCoche,
+                                &alg_aux,
+                                permiso_avance,
+                                permiso_avance_commit
+                        );
+                }//fin else if
+        }//fin while
+}//fin funcion bucle_chofer
+
+void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[]){
         int resultado = PARKING_inicio(retardo, funciones, id_sem, id_buzon, id_mem, debug);
 
         //===========================================================
@@ -340,7 +346,7 @@ void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[], int numChoferes){
         //===========================================================
 
         //creacion de los choferes
-        for(int i=0; i < (int)numChoferes; i++){
+        for(int i=0; i < num_choferes; i++){
                 crear_chofer();
         }//fin for
 
@@ -360,9 +366,10 @@ void finalizar_simulacion(){
         if (debug) fprintf(stderr, "[D-PADRE] PID=%d muriendo\n", getpid());
 }//fin funcion finalizar_simulacion
 
+
 //Luego si se me va te lo dejo aqui por si lo lees yo creo que main deberiamos de vaciarlo porque de main solo tendrian que haber llamadas a fuciones y tal
 int main(int argc, char *argv[]) {
-        //configurar sennales
+        //configurar señales
     //        struct sigaction sa_ctrlc, sa_usr1; //FIXME: Esto lo he cogido de un codigo mio lo tengo que agregar si es necesario por ahora dejemoslo asi para que no de error, todos los que tengo la sa_usr1 es lo mismo por eso estan comentados
         struct sigaction sa_ctrlc;
         memset(&sa_ctrlc, 0, sizeof(sa_ctrlc));
@@ -376,14 +383,17 @@ int main(int argc, char *argv[]) {
         // validar y cargar argumentos en las variables globales
         validar_argumentos(argc, argv);
 
-        int numVelocidad=atoi(argv[1]); //atoi permite pasar una variable tipo caracter a una variable tipo entero
-        int numChoferes=atoi(argv[2]);
         if (debug){
-                fprintf(stderr,"NUM_VELOCIDAD: %d\n",numVelocidad);
-                fprintf(stderr,"NUM_CHOFERES: %d\n",numChoferes);
+                fprintf(stderr,"NUM_VELOCIDAD: %d\n",retardo);
+                fprintf(stderr,"NUM_CHOFERES: %d\n",num_choferes);
         }//fin if
 
-        parking(numChoferes);
+        parking();
+
+        //limpieza de los recursos utilizados
+        limpiar();
+        system("tput cnorm"); //esto lo que hace es volver a poner el cursor "normal", ya que cuando se ejecuta el programa a veces el cursor se queda en modo "escondido" esto lo que hace es cambiarle a modo mostar
+
         return 0;
 } //fin funcion main
 
