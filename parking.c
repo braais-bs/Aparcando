@@ -3,7 +3,6 @@
 * Curso: 2025-2026
 * Práctica Linux de Grupo
 * Autores: Brais Bértolo Senra, Juan Riego Vila
-* Fecha: La que toque cuando sea
 */
 
 #include <stdio.h>
@@ -50,7 +49,6 @@ MEM_PROPIA *mp = NULL;
 
 
 // declaracion de los prototipos de las funciones
-
 void manejar_ctrlc(int signal);
 void ayudaPrograma(char *argv[]);
 void validar_argumentos(int argc, char *argv[]);
@@ -133,7 +131,40 @@ void validar_argumentos(int argc, char *argv[]){
 
 
 int primer_ajuste(HCoche hc) {
-        return 0;
+        int longitud = PARKING_getLongitud(hc); // obtiene la longitud del coche
+        int huecoLibre = 0; // contador de posiciones libres consecutivas (para saber si el coche entra en un hueco)
+        int pos = -1; // posicion donde aparca (-1 es que no encontro hueco)
+
+        if (debug) fprintf(stderr, "[D-ALG:primer_ajuste] Coche %d - longitud=%d - buscando hueco\n", hc, longitud);
+
+        for (int i = 0; i < TAM_PARKING; ) {
+                if (mp->acera[PRIMER_AJUSTE][i] == 0) {
+                        huecoLibre++; // suma uno al contador de posiciones libres seguidas
+                        if (huecoLibre >= longitud) { // si el hueco libre (posiciones seguidas) es mayor o igual que la longitud del coche
+                                pos = i - longitud + 1; // calcula el inicio del hueco
+                                break;
+                        }
+                        i++;
+                } else {
+                        i += mp->acera[PRIMER_AJUSTE][i]; // NOTA BRAIS: esto es un aoptimizacion que meti ahora. antes hacia un for con i++ que iba posicion por posicion. Ahora, si encuentro un coche aparcado, salta las posiciones que ocupe ese coche (por eso de que en el coche para indicar que una posicion esta ocupada se guarda la longitud del coche)
+                        huecoLibre = 0; // si mp->acera en algun momento no da 0, se reinicia el contador
+                }
+        }
+
+        if (pos >= 0) { // si encontro hueco
+                for (int i = pos; i < pos + longitud; i++) { // recorre las posiciones que ocupara el coche
+                        mp->acera[PRIMER_AJUSTE][i] = longitud; // las marca como ocupadas (las marca con el numero de longitud del coche)
+                }
+        }
+
+        if (debug) {
+                if (pos >= 0)
+                        fprintf(stderr, "[D-ALG:primer_ajuste] Coche %d -> hueco encontrado en pos=%d\n", hc, pos);
+                else
+                        fprintf(stderr, "[D-ALG:primer_ajuste] Coche %d -> sin hueco (pos=-1)\n", hc);
+        }//fin if
+
+        return pos; //
 }//fin funcion primer_ajuste
 
 int siguiente_ajuste(HCoche hc) {
@@ -287,7 +318,7 @@ void bucle_chofer(){
 
                 //subtipo para representar el indice del algoritmo (0 a 3) 
                 //NOTA BRAIS: EN el .h hay un int PARKING_getAlgoritmo(HCoche), por el nombre te diria que va aqui, no se con lo que tu tienes si también va, lo comento por que estuve mirando el .h
-                alg_aux = (int)msg.subtipo;
+                alg_aux = PARKING_getAlgoritmo(msg.hCoche);
 
                 if (msg.subtipo == PARKING_MSGSUB_APARCAR) {
                         //==========================
