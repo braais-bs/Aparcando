@@ -57,8 +57,12 @@ int mejor_ajuste(HCoche hc);
 int peor_ajuste(HCoche hc);
 void limpiar(void);
 void manejar_ctrlc(int signal);
-void parking(int argcc, char *argvc[]);
 int main(int argc, char *argv[]);
+void parking();
+void inicializar_semaforos();
+void inicializacion_buzones();
+void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[]);
+void finalizar_simulacion();
 
 void ayudaPrograma(char *argv[]){
         printf("=====AYUDA PROGRAMA [%s]=====\n",argv[0]);
@@ -189,7 +193,12 @@ int main(int argc, char *argv[]) {
         // validar y cargar argumentos en las variables globales
         validar_argumentos(argc, argv);
 
+        parking();
+        return 0;
+} //fin funcion main
 
+
+void parking(){
         //--------------------
         // Inicializacion
         //--------------------
@@ -231,7 +240,23 @@ int main(int argc, char *argv[]) {
                 mp->proxAparcar[i] = 1;
         }//fin for
 
+        // creacion e inicializacion de los semaforos
+        inicializar_semaforos();
 
+        //creacion del buzon
+        inicializacion_buzones();
+
+        // iniciar la simulacion con los valores leidos de los argumentos
+        inicializar_simulacion(funciones);
+
+        //limpieza de los recursos utilizados
+        limpiar();
+        system("tput cnorm"); //esto lo que hace es volver a poner el cursor "normal", ya que cuando se ejecuta el programa a veces el cursor se queda en modo "escondido" esto lo que hace es cambiarle a modo mostar
+
+        finalizar_simulacion();
+}//fin funcion parking
+
+void inicializar_semaforos(){
         //creacion de los semaforos
         id_sem = semget(IPC_PRIVATE, nSem + NUM_SEM_PROPIOS, IPC_CREAT | 0600);
         if (id_sem == -1) {
@@ -247,18 +272,18 @@ int main(int argc, char *argv[]) {
         for (int i = 0; i < NUM_ALGORITMOS; i++) {
                 semctl(id_sem, IDX_SEM_ORDEN(i), SETVAL, 1);
         }//fin for
+}// incializar_semaforos
 
-
-        //creacion del buzon
+void inicializacion_buzones(){
         id_buzon = msgget(IPC_PRIVATE, IPC_CREAT | 0600);
         if (id_buzon == -1) {
                 perror("msgget");
                 limpiar();
                 exit(1);
         }//fin if
+}//fin funcion inicializacion_buzones
 
-
-        // iniciar la simulacion con los valores leidos de los argumentos
+void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[]){
         int resultado = PARKING_inicio(retardo, funciones, id_sem, id_buzon, id_mem, debug);
 
         //===========================================================
@@ -338,10 +363,9 @@ int main(int argc, char *argv[]) {
 
         PARKING_simulaciOn();// llamada a esta funcion desde el proceso padre, definicion funcion al final del codigo
 
-        //limpieza de los recursos utilizados
-        limpiar();
-        system("tput cnorm"); //esto lo que hace es volver a poner el cursor "normal", ya que cuando se ejecuta el programa a veces el cursor se queda en modo "escondido" esto lo que hace es cambiarle a modo mostar
+}//fin funcion inicializar_simulacion
 
+void finalizar_simulacion(){
         // esperar a que todos los hijos terminen antes de que el padre muera
         int status;
         pid_t pid_muerto;
@@ -352,9 +376,7 @@ int main(int argc, char *argv[]) {
         }
 
         if (debug) fprintf(stderr, "[D-PADRE] PID=%d muriendo\n", getpid());
-
-        return 0;
-} //fin funcion main
+}//fin funcion finalizar_simulacion
 
 //========================================Definiciones funciones en el codigo========================================
 /*
