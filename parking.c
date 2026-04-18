@@ -3,6 +3,7 @@
 * Curso: 2025-2026
 * Práctica Linux de Grupo
 * Autores: Brais Bértolo Senra, Juan Riego Vila
+* Fecha: La que toque cuando sea
 */
 
 #include <stdio.h>
@@ -49,23 +50,36 @@ MEM_PROPIA *mp = NULL;
 
 
 // declaracion de los prototipos de las funciones
+
+void manejar_ctrlc(int signal);
 void ayudaPrograma(char *argv[]);
 void validar_argumentos(int argc, char *argv[]);
 int primer_ajuste(HCoche hc);
 int siguiente_ajuste(HCoche hc);
 int mejor_ajuste(HCoche hc);
 int peor_ajuste(HCoche hc);
-void limpiar(void);
-void manejar_ctrlc(int signal);
-void parking();
+void aparcar_commit(HCoche hc);
+void permiso_avance(HCoche hc);
+void permiso_avance_commit(HCoche hc);
 void inicializar_memoria_compartida();
 void inicializar_semaforos();
 void inicializacion_buzones();
+void limpiar(void);
 void crear_chofer();
 void bucle_chofer();
 void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[]);
 void finalizar_simulacion();
+void parking();
 int main(int argc, char *argv[]);
+
+
+void manejar_ctrlc(int signal) {
+        //=======================
+        if (debug) fprintf(stderr, "[D-SIG] Señal %d recibida\n", signal);
+        //=======================
+        terminar = 1; //la funcion de esto es que cuando se ejecute el programa parar los bucles de creacion de los hijos cuando se reciba ctrl-c para limpiar bien los procesos
+        system("tput cnorm"); //esto lo que hace es volver a poner el cursor "normal", ya que cuando se ejecuta el programa a veces el cursor se queda en modo "escondido" esto lo que hace es cambiarle a modo mostar
+}//fin funcion manejar_ctrlc
 
 void ayudaPrograma(char *argv[]){
         printf("=====AYUDA PROGRAMA [%s]=====\n",argv[0]);
@@ -117,6 +131,7 @@ void validar_argumentos(int argc, char *argv[]){
         }//fin if
 }//fin funcion validar_argumentos
 
+
 int primer_ajuste(HCoche hc) {
         return 0;
 }//fin funcion primer_ajuste
@@ -133,31 +148,6 @@ int peor_ajuste(HCoche hc) {
         return -2; // de momento no queremos que funcione
 }//fin funcion peor_ajuste
 
-void limpiar(void) {
-        //=======================
-        if (debug) fprintf(stderr, "[D-IPC] Limpiando recursos\n");
-        //=======================
-        if (mem_base != NULL && mem_base != (char *)-1) {
-                shmdt(mem_base);
-        }//fin if
-        if (id_mem   != -1) {
-                shmctl(id_mem,   IPC_RMID, NULL);
-        }//fin if
-        if (id_sem   != -1) {
-                semctl(id_sem, 0, IPC_RMID);
-        }//fin if
-        if (id_buzon != -1) {
-                msgctl(id_buzon, IPC_RMID, NULL);
-        }//fin if
-}//fin funcion limpiar
-
-void manejar_ctrlc(int signal) {
-        //=======================
-        if (debug) fprintf(stderr, "[D-SIG] Señal %d recibida\n", signal);
-        //=======================
-        terminar = 1; //la funcion de esto es que cuando se ejecute el programa parar los bucles de creacion de los hijos cuando se reciba ctrl-c para limpiar bien los procesos
-        system("tput cnorm"); //esto lo que hace es volver a poner el cursor "normal", ya que cuando se ejecuta el programa a veces el cursor se queda en modo "escondido" esto lo que hace es cambiarle a modo mostar
-}//fin funcion manejar_ctrlc
 
 //-=-=-=-=-=-=-=-=-=-=- Funciones de Rellamada (Callbacks), para el apartado 8 -=-=-=-=-=-=-=-=-=-=-
 
@@ -179,30 +169,6 @@ void permiso_avance_commit(HCoche hc) {
         if (debug) fprintf(stderr, "[D-PKG:permiso_avance_commit] Coche %d ha avanzado con éxito.\n", hc);
 }//fin funcion mi_permiso_avance_commit
 
-
-void parking(){
-        // array de 4 funciones, una por algoritmo (PRIMER, SIGUIENTE, MEJOR, PEOR)
-        TIPO_FUNCION_LLEGADA funciones[4] = {
-                primer_ajuste,
-                siguiente_ajuste,
-                mejor_ajuste,
-                peor_ajuste
-        };
-
-        //creacion de la memoria compartida
-        inicializar_memoria_compartida();
-
-        // creacion e inicializacion de los semaforos
-        inicializar_semaforos();
-
-        //creacion del buzon
-        inicializacion_buzones();
-
-        // iniciar la simulacion con los valores leidos de los argumentos
-        inicializar_simulacion(funciones);
-
-        finalizar_simulacion();
-}//fin funcion parking
 
 void inicializar_memoria_compartida(){
         // obtener tamaño de la memoria compartida
@@ -263,6 +229,24 @@ void inicializacion_buzones(){
                 exit(1);
         }//fin if
 }//fin funcion inicializacion_buzones
+
+void limpiar(void) {
+        //=======================
+        if (debug) fprintf(stderr, "[D-IPC] Limpiando recursos\n");
+        //=======================
+        if (mem_base != NULL && mem_base != (char *)-1) {
+                shmdt(mem_base);
+        }//fin if
+        if (id_mem   != -1) {
+                shmctl(id_mem,   IPC_RMID, NULL);
+        }//fin if
+        if (id_sem   != -1) {
+                semctl(id_sem, 0, IPC_RMID);
+        }//fin if
+        if (id_buzon != -1) {
+                msgctl(id_buzon, IPC_RMID, NULL);
+        }//fin if
+}//fin funcion limpiar
 
 void crear_chofer(){
         // creación del proceso chofer
@@ -330,6 +314,7 @@ void bucle_chofer(){
         }//fin while
 }//fin funcion bucle_chofer
 
+
 void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[]){
         int resultado = PARKING_inicio(retardo, funciones, id_sem, id_buzon, id_mem, debug);
 
@@ -366,6 +351,31 @@ void finalizar_simulacion(){
 
         if (debug) fprintf(stderr, "[D-PADRE] PID=%d muriendo\n", getpid());
 }//fin funcion finalizar_simulacion
+
+void parking(){
+        // array de 4 funciones, una por algoritmo (PRIMER, SIGUIENTE, MEJOR, PEOR)
+        TIPO_FUNCION_LLEGADA funciones[4] = {
+                primer_ajuste,
+                siguiente_ajuste,
+                mejor_ajuste,
+                peor_ajuste
+        };
+
+        //creacion de la memoria compartida
+        inicializar_memoria_compartida();
+
+        // creacion e inicializacion de los semaforos
+        inicializar_semaforos();
+
+        //creacion del buzon
+        inicializacion_buzones();
+
+        // iniciar la simulacion con los valores leidos de los argumentos
+        inicializar_simulacion(funciones);
+
+        finalizar_simulacion();
+}//fin funcion parking
+
 
 
 //Luego si se me va te lo dejo aqui por si lo lees yo creo que main deberiamos de vaciarlo porque de main solo tendrian que haber llamadas a fuciones y tal
