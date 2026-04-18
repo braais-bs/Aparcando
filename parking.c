@@ -57,11 +57,11 @@ int mejor_ajuste(HCoche hc);
 int peor_ajuste(HCoche hc);
 void limpiar(void);
 void manejar_ctrlc(int signal);
-void parking();
+void parking(int numChoferes);
 void inicializar_semaforos();
 void inicializacion_buzones();
 void crear_chofer();
-void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[]);
+void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[], int numChoferes);
 void finalizar_simulacion();
 int main(int argc, char *argv[]);
 
@@ -178,7 +178,7 @@ void permiso_avance_commit(HCoche hc) {
 }//fin funcion mi_permiso_avance_commit
 
 
-void parking(){
+void parking(int numChoferes){
         // array de 4 funciones, una por algoritmo (PRIMER, SIGUIENTE, MEJOR, PEOR)
         TIPO_FUNCION_LLEGADA funciones[4] = {
                 primer_ajuste,
@@ -223,7 +223,7 @@ void parking(){
         inicializacion_buzones();
 
         // iniciar la simulacion con los valores leidos de los argumentos
-        inicializar_simulacion(funciones);
+        inicializar_simulacion(funciones, numChoferes);
 
         //limpieza de los recursos utilizados
         limpiar();
@@ -323,7 +323,7 @@ void crear_chofer(){
         }//fin if
 }//fin funcion crear_chofer
 
-void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[]){
+void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[], int numChoferes){
         int resultado = PARKING_inicio(retardo, funciones, id_sem, id_buzon, id_mem, debug);
 
         //===========================================================
@@ -340,10 +340,9 @@ void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[]){
         //===========================================================
 
         //creacion de los choferes
-        crear_chofer();
-        crear_chofer();
-        crear_chofer();
-        crear_chofer();
+        for(int i=0; i < (int)numChoferes; i++){
+                crear_chofer();
+        }//fin for
 
         PARKING_simulaciOn();// llamada a esta funcion desde el proceso padre, definicion funcion al final del codigo
 }//fin funcion inicializar_simulacion
@@ -377,7 +376,14 @@ int main(int argc, char *argv[]) {
         // validar y cargar argumentos en las variables globales
         validar_argumentos(argc, argv);
 
-        parking();
+        int numVelocidad=atoi(argv[1]); //atoi permite pasar una variable tipo caracter a una variable tipo entero
+        int numChoferes=atoi(argv[2]);
+        if (debug){
+                fprintf(stderr,"NUM_VELOCIDAD: %d\n",numVelocidad);
+                fprintf(stderr,"NUM_CHOFERES: %d\n",numChoferes);
+        }//fin if
+
+        parking(numChoferes);
         return 0;
 } //fin funcion main
 
