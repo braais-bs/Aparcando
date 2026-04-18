@@ -284,7 +284,7 @@ void crear_chofer(){
         }//fin if
 }//fin funcion crear_chofer
 
-bucle_chofer(){
+void bucle_chofer(){
         struct PARKING_mensajeBiblioteca msg;
         int alg_aux;
 
