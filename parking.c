@@ -60,8 +60,8 @@ void manejar_ctrlc(int signal);
 void parking();
 void inicializar_semaforos();
 void inicializacion_buzones();
-void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[]);
 void crear_chofer();
+void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[]);
 void finalizar_simulacion();
 int main(int argc, char *argv[]);
 
@@ -179,10 +179,6 @@ void permiso_avance_commit(HCoche hc) {
 
 
 void parking(){
-        //--------------------
-        // Inicializacion
-        //--------------------
-
         // array de 4 funciones, una por algoritmo (PRIMER, SIGUIENTE, MEJOR, PEOR)
         TIPO_FUNCION_LLEGADA funciones[4] = {
                 primer_ajuste,
@@ -252,7 +248,7 @@ void inicializar_semaforos(){
         for (int i = 0; i < NUM_ALGORITMOS; i++) {
                 semctl(id_sem, IDX_SEM_ORDEN(i), SETVAL, 1);
         }//fin for
-}// incializar_semaforos
+}//fin funcion incializar_semaforos
 
 void inicializacion_buzones(){
         id_buzon = msgget(IPC_PRIVATE, IPC_CREAT | 0600);
@@ -262,27 +258,6 @@ void inicializacion_buzones(){
                 exit(1);
         }//fin if
 }//fin funcion inicializacion_buzones
-
-void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[]){
-        int resultado = PARKING_inicio(retardo, funciones, id_sem, id_buzon, id_mem, debug);
-
-        //===========================================================
-        if (debug) {
-                fprintf(stderr, "[D-IPC] IPC creados -> SHM:%d SEM:%d MSG:%d\n", id_mem, id_sem, id_buzon);
-                fprintf(stderr, "[D-PKG] PARKING_inicio retornó: %d\n", resultado);
-                if (resultado == 0) {
-                        fprintf(stderr, "[D-PKG] PARKING_inicio funciona correctamente\n");
-                }//fin if
-                else {
-                        fprintf(stderr, "[D-PKG] PARKING_inicio falló\n");
-                }//fin else
-        }//fin if
-        //===========================================================
-
-        crear_chofer();
-
-        PARKING_simulaciOn();// llamada a esta funcion desde el proceso padre, definicion funcion al final del codigo
-}//fin funcion inicializar_simulacion
 
 void crear_chofer(){
         // creación del proceso chofer
@@ -347,6 +322,31 @@ void crear_chofer(){
                 exit(0);
         }//fin if
 }//fin funcion crear_chofer
+
+void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[]){
+        int resultado = PARKING_inicio(retardo, funciones, id_sem, id_buzon, id_mem, debug);
+
+        //===========================================================
+        if (debug) {
+                fprintf(stderr, "[D-IPC] IPC creados -> SHM:%d SEM:%d MSG:%d\n", id_mem, id_sem, id_buzon);
+                fprintf(stderr, "[D-PKG] PARKING_inicio retornó: %d\n", resultado);
+                if (resultado == 0) {
+                        fprintf(stderr, "[D-PKG] PARKING_inicio funciona correctamente\n");
+                }//fin if
+                else {
+                        fprintf(stderr, "[D-PKG] PARKING_inicio falló\n");
+                }//fin else
+        }//fin if
+        //===========================================================
+
+        //creacion de los choferes
+        crear_chofer();
+        crear_chofer();
+        crear_chofer();
+        crear_chofer();
+
+        PARKING_simulaciOn();// llamada a esta funcion desde el proceso padre, definicion funcion al final del codigo
+}//fin funcion inicializar_simulacion
 
 void finalizar_simulacion(){
         // esperar a que todos los hijos terminen antes de que el padre muera
