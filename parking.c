@@ -62,6 +62,7 @@ void inicializar_memoria_compartida();
 void inicializar_semaforos();
 void inicializacion_buzones();
 void crear_chofer();
+void bucle_chofer();
 void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[]);
 void finalizar_simulacion();
 int main(int argc, char *argv[]);
