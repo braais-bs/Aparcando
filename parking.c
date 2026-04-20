@@ -60,8 +60,10 @@ void aparcar_commit(HCoche hc);
 void permiso_avance(HCoche hc);
 void permiso_avance_commit(HCoche hc);
 void inicializar_memoria_compartida();
-void inicializar_semaforos();
 void inicializacion_buzones();
+void inicializar_semaforos();
+void sem_esperar_turno(int idx_sem, int num_coche);
+void sem_liberar_turno(int idx_sem, int num_coche);
 void limpiar(void);
 void crear_chofer();
 void bucle_chofer();
@@ -184,9 +186,11 @@ int peor_ajuste(HCoche hc) {
 
 //se ejecuta cuando la biblioteca confirma que el coche ha aparcado
 void aparcar_commit(HCoche hc) {
-        if (debug) fprintf(stderr, "[D-PKG:aparcar_commit] Coche %d aparcado en algoritmo [no implementado] (Commit)\n", hc);
-        //aqui es donde levantarias el semaforo para el siguiente coche (mp->proxaparcar)
-        //semop(id_sem, ...);
+        //==========================
+        if (debug) fprintf(stderr, "[D-PKG:aparcar_commit] Coche %d aparcado\n", hc);
+        //==========================
+        
+        sem_liberar_turno(IDX_SEM_ORDEN(PARKING_getAlgoritmo(hc)), PARKING_getNUmero(hc));
 }//fin funcion aparcar_commit
 
 //se ejecuta cuando el coche quiere moverse. debe bloquearse hasta que sea seguro
@@ -231,6 +235,15 @@ void inicializar_memoria_compartida(){
         }//fin for       
 }
 
+void inicializacion_buzones(){
+        id_buzon = msgget(IPC_PRIVATE, IPC_CREAT | 0600);
+        if (id_buzon == -1) {
+                perror("msgget");
+                limpiar();
+                exit(1);
+        }//fin if
+}//fin funcion inicializacion_buzones
+
 void inicializar_semaforos(){
         // obtener numero de semaforos
         nSem = PARKING_getNSemAforos();
@@ -252,14 +265,23 @@ void inicializar_semaforos(){
         }//fin for
 }//fin funcion incializar_semaforos
 
-void inicializacion_buzones(){
-        id_buzon = msgget(IPC_PRIVATE, IPC_CREAT | 0600);
-        if (id_buzon == -1) {
-                perror("msgget");
-                limpiar();
-                exit(1);
-        }//fin if
-}//fin funcion inicializacion_buzones
+// espera por su turno sin consumir CPU
+void sem_esperar_turno(int idx_sem, int num_coche) {
+        struct sembuf op;
+        op.sem_num = idx_sem;
+        op.sem_op  = -num_coche;
+        op.sem_flg = 0;
+        semop(id_sem, &op, 1);
+
+        // restaurar el valor porque semop lo restó
+        op.sem_op = +num_coche;
+        semop(id_sem, &op, 1);
+}
+
+// permite pasar al siguiente coche
+void sem_liberar_turno(int idx_sem, int num_coche) {
+        semctl(id_sem, idx_sem, SETVAL, num_coche + 1);
+}
 
 void limpiar(void) {
         //=======================
@@ -322,8 +344,16 @@ void bucle_chofer(){
 
                 if (msg.subtipo == PARKING_MSGSUB_APARCAR) {
                         //==========================
-                        if (debug) fprintf(stderr, "[D-CHOFER: aparcar] PID=%d -> Coche %d va a aparcar\n", getpid(), msg.hCoche);
+                        if (debug) fprintf(stderr, "[D-CHOFER: aparcar] PID=%d -> Coche %d quiere aparcar\n", getpid(), msg.hCoche);
                         //==========================
+
+                        // esperar a que sea el turno de este coche
+                        sem_esperar_turno(IDX_SEM_ORDEN(alg_aux), PARKING_getNUmero(msg.hCoche));
+
+                        //==========================
+                        if (debug) fprintf(stderr, "[D-CHOFER: aparcar] PID=%d -> Coche %d ya puede aparcar\n", getpid(), msg.hCoche);
+                        //==========================
+
                         PARKING_aparcar(
                                 msg.hCoche,
                                 &alg_aux,
@@ -335,6 +365,7 @@ void bucle_chofer(){
                         //==========================
                         if (debug) fprintf(stderr, "[D-CHOFER: desaparcar] PID=%d -> Coche %d va a desaparcar\n", getpid(), msg.hCoche);
                         //==========================
+
                         PARKING_desaparcar(
                                 msg.hCoche,
                                 &alg_aux,
