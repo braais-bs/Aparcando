@@ -195,14 +195,48 @@ void aparcar_commit(HCoche hc) {
 
 //se ejecuta cuando el coche quiere moverse. debe bloquearse hasta que sea seguro
 void permiso_avance(HCoche hc) {
-        if (debug) fprintf(stderr, "[D-PKG:permiso_avance] Coche %d pidiendo permiso para avanzar...\n", hc);
-        //De momento como dice el enunciado solo mensaje
-        //en una version final aqui se usarian semaforos para evitar colisiones
+        if (debug) {
+                fprintf(stderr, "[D-PKG:permiso_avance] Coche %d pidiendo permiso para avanzar...\n", hc);
+                int x = PARKING_getX(hc);
+                int y = PARKING_getY(hc);
+                int x2 = PARKING_getX2(hc);
+                int y2 = PARKING_getX2(hc);
+                int numCoche = PARKING_getNUmero(hc);
+                int longitudCoche = PARKING_getLongitud(hc);
+                int posicionAcera = PARKING_getPosiciOnEnAcera(hc);
+                fprintf(stderr, "[D-PKG:permiso_avance] Coche %d: X = %d, Y = %d, X2 = %d, Y2 = %d, Numero = %d, Longitud = %d, PosicionAcera = %d\n", hc, x, y , x2, y2, numCoche, longitudCoche, posicionAcera);
+        }//fin if
+                //De momento como dice el enunciado solo mensaje
+                //en una version final aqui se usarian semaforos para evitar colisiones
 }//fin funcion permiso_avance
 
 void permiso_avance_commit(HCoche hc) {
-        if (debug) fprintf(stderr, "[D-PKG:permiso_avance_commit] Coche %d ha avanzado con éxito.\n", hc);
+        if (debug) {
+                fprintf(stderr, "[D-PKG:permiso_avance_commit] Coche %d ha avanzado con éxito.\n", hc);
+                int x = PARKING_getX(hc);
+                int y = PARKING_getY(hc);
+                int x2 = PARKING_getX2(hc);
+                int y2 = PARKING_getX2(hc);
+                int numCoche = PARKING_getNUmero(hc);
+                int longitudCoche = PARKING_getLongitud(hc);
+                int posicionAcera = PARKING_getPosiciOnEnAcera(hc);
+                fprintf(stderr, "[D-PKG:permiso_avance_commit] Coche %d: X = %d, Y = %d, X2 = %d, Y2 = %d, Numero = %d, Longitud = %d, PosicionAcera = %d\n", hc, x, y , x2, y2, numCoche, longitudCoche, posicionAcera);
+        }//fin if
 }//fin funcion mi_permiso_avance_commit
+
+void permiso_avance_desaparcar(HCoche hc) {
+        if (debug) {
+                fprintf(stderr, "[D-PKG:permiso_avance_desaparcar] Coche %d ha avanzado con éxito.\n", hc);
+                int x = PARKING_getX(hc);
+                int y = PARKING_getY(hc);
+                int x2 = PARKING_getX2(hc);
+                int y2 = PARKING_getX2(hc);
+                int numCoche = PARKING_getNUmero(hc);
+                int longitudCoche = PARKING_getLongitud(hc);
+                int posicionAcera = PARKING_getPosiciOnEnAcera(hc);
+                fprintf(stderr, "[D-PKG:permiso_avance_desaparcar] Coche %d: X = %d, Y = %d, X2 = %d, Y2 = %d, Numero = %d, Longitud = %d, PosicionAcera = %d\n", hc, x, y , x2, y2, numCoche, longitudCoche, posicionAcera);
+        }//fin if
+}//fin funcion permiso_avance_commit_desaparcar
 
 
 void inicializar_memoria_compartida(){
@@ -344,14 +378,20 @@ void bucle_chofer(){
 
                 if (msg.subtipo == PARKING_MSGSUB_APARCAR) {
                         //==========================
-                        if (debug) fprintf(stderr, "[D-CHOFER: aparcar] PID=%d -> Coche %d quiere aparcar\n", getpid(), msg.hCoche);
+                        if (debug) {
+                            fprintf(stderr, "[D-CHOFER: aparcar] PID=%d -> Coche %d quiere aparcar\n", getpid(), msg.hCoche);
+                            fprintf(stderr, "[DBUZON-CHOFER: aparcar] PID=%d -> Coche %d: msg_tipo = %li, msg_subtipo = %li\n", getpid(), msg.hCoche, msg.tipo, msg.subtipo);
+                        }//fin if
                         //==========================
 
                         // esperar a que sea el turno de este coche
                         sem_esperar_turno(IDX_SEM_ORDEN(alg_aux), PARKING_getNUmero(msg.hCoche));
 
                         //==========================
-                        if (debug) fprintf(stderr, "[D-CHOFER: aparcar] PID=%d -> Coche %d ya puede aparcar\n", getpid(), msg.hCoche);
+                        if (debug) {
+                                fprintf(stderr, "[D-CHOFER: aparcar] PID=%d -> Coche %d ya puede aparcar\n", getpid(), msg.hCoche);
+                                fprintf(stderr, "[DBUZON-CHOFER: aparcar] PID=%d -> Coche %d: msg_tipo = %li, msg_subtipo = %li\n", getpid(), msg.hCoche, msg.tipo, msg.subtipo);
+                        }//fin if
                         //==========================
 
                         PARKING_aparcar(
@@ -363,13 +403,16 @@ void bucle_chofer(){
                         );
                 } else if (msg.subtipo == PARKING_MSGSUB_DESAPARCAR) {
                         //==========================
-                        if (debug) fprintf(stderr, "[D-CHOFER: desaparcar] PID=%d -> Coche %d va a desaparcar\n", getpid(), msg.hCoche);
+                        if (debug){
+                                fprintf(stderr, "[D-CHOFER: desaparcar] PID=%d -> Coche %d va a desaparcar\n", getpid(), msg.hCoche);
+                                fprintf(stderr, "[DBUZON-CHOFER: desaparcar] PID=%d -> Coche %d: msg_tipo = %li, msg_subtipo = %li\n", getpid(), msg.hCoche, msg.tipo, msg.subtipo);
+                        }//fin if
                         //==========================
 
                         PARKING_desaparcar(
                                 msg.hCoche,
                                 &alg_aux,
-                                permiso_avance,
+                                permiso_avance_desaparcar,
                                 permiso_avance_commit
                         );
                 }//fin else if
