@@ -89,6 +89,7 @@ void manejar_ctrlc(int signal) {
         PARKING_fin(0);
         limpiar();
         finalizar_simulacion();  // wait de los hijos
+        system("tput cup 30 0");
         system("tput cnorm");
         exit(0); // sale del programa
 }//fin funcion manejar_ctrlc
