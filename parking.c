@@ -49,9 +49,13 @@ int nSem, tam;
 char *mem_base = NULL;
 MEM_PROPIA *mp = NULL;
 
+pid_t flag_avisador = -1;
+
 
 // declaracion de los prototipos de las funciones
 void manejar_ctrlc(int signal);
+void manejar_alarma(int sig);
+void proceso_avisador();
 void ayudaPrograma(char *argv[]);
 void validar_argumentos(int argc, char *argv[]);
 int primer_ajuste(HCoche hc);
@@ -69,6 +73,7 @@ void inicializar_semaforos();
 void sem_esperar_turno(int idx_sem, int num_coche);
 void sem_liberar_turno(int idx_sem, int num_coche);
 void limpiar(void);
+void crear_avisador();
 void crear_chofer();
 void bucle_chofer();
 void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[]);
@@ -83,12 +88,38 @@ void manejar_ctrlc(int signal) {
         //=======================
 
         PARKING_fin(0);
-        limpiar();
+
+        // hace falta matar al avisador para que no espere 30s
+        if (flag_avisador > 0) {
+                kill(flag_avisador, SIGTERM);
+        }
+
         finalizar_simulacion();  // wait de los hijos
-        system("tput cup 30 0");
+        limpiar();
+        system("tput cup 27 0");
         system("tput cnorm");
         exit(0); // sale del programa
 }//fin funcion manejar_ctrlc
+
+void manejar_alarma(int sig) {
+        if (debug) fprintf(stderr, "[D-ALARM] Tiempo agotado, terminando simulación\n");
+        PARKING_fin(1); // terminación normal
+}//fin funcion manejar_alarma
+
+void proceso_avisador() {
+        // ignorar la señal ctrl + c
+        signal(SIGINT, SIG_IGN);
+
+        // registra el manejador de SIGALRM
+        struct sigaction sa;
+        memset(&sa, 0, sizeof(sa));
+        sa.sa_handler = manejar_alarma; // llama a manejar_alarma cuando reciba SIGALRM, que termina el programa
+        sigaction(SIGALRM, &sa, NULL);
+
+        alarm(30); // a los 30s salta la alarma
+        pause(); // hasta que salte la alarma no consume cpu
+        exit(0);
+}//fin funcion proceso_avisador
 
 void ayudaPrograma(char *argv[]){
         printf("=====AYUDA PROGRAMA [%s]=====\n",argv[0]);
@@ -297,6 +328,7 @@ void permiso_avance_commit(HCoche hc) {
                 op = (struct sembuf){IDX_SEM_MUTEX, -1, 0};
                 semop(id_sem, &op, 1);
                 mp->carril[alg][final_coche] = 0; // libera donde estaba
+
                 op = (struct sembuf){IDX_SEM_MUTEX, +1, 0};
                 semop(id_sem, &op, 1);
 
@@ -425,6 +457,26 @@ void limpiar(void) {
         }//fin if
 }//fin funcion limpiar
 
+void crear_avisador() {
+        pid_t pid_avisador = fork();
+
+        // fallo en fork (creacion del proceso hijo)
+        if (pid_avisador < 0) {
+                perror("fork avisador");
+                limpiar();
+                exit(1);
+        }//fin if
+
+        // fork creó el proceso hijo
+        if (pid_avisador == 0) {
+                proceso_avisador();
+                exit(0);
+        }//fin if
+
+        // guardamos el pid del avisador
+        flag_avisador = pid_avisador;
+}//fin funcion crear_avisador
+
 void crear_chofer(){
         // creación del proceso chofer
         pid_t pid_chofer = fork();
@@ -438,7 +490,7 @@ void crear_chofer(){
 
         // fork creó el proceso hijo
         if (pid_chofer == 0) {
-                // el hijo ignora SIGINT, solo muere cuando el buzon desaparece
+                // ignora la señal ctrl + c
                 signal(SIGINT, SIG_IGN);
                 bucle_chofer();
                 if (debug) fprintf(stderr, "[D-CHOFER] PID=%d muriendo\n", getpid());
@@ -526,6 +578,9 @@ void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[]){
         }//fin if
         //===========================================================
 
+        // creacion del proceso avisador
+        crear_avisador();
+
         //creacion de los choferes
         for(int i=0; i < num_choferes; i++){
                 crear_chofer();
@@ -603,6 +658,7 @@ int main(int argc, char *argv[]) {
 
         //limpieza de los recursos utilizados
         limpiar();
+        system("tput cup 27 0");
         system("tput cnorm"); //esto lo que hace es volver a poner el cursor "normal", ya que cuando se ejecuta el programa a veces el cursor se queda en modo "escondido" esto lo que hace es cambiarle a modo mostar
 
         return 0;
