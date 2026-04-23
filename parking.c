@@ -291,12 +291,12 @@ void permiso_avance_commit(HCoche hc) {
 
         // libera si el coche se mueve en horizontal en el mismo carril
         if (Y_anterior == 2 && Y_actual == 2 && X_anterior < TAM_PARKING) {
-                int cola = X_anterior + PARKING_getLongitud(hc) - 1;
+                int final_coche = X_anterior + PARKING_getLongitud(hc) - 1;
 
                 struct sembuf op;
                 op = (struct sembuf){IDX_SEM_MUTEX, -1, 0};
                 semop(id_sem, &op, 1);
-                mp->carril[alg][cola] = 0; // libera donde estaba
+                mp->carril[alg][final_coche] = 0; // libera donde estaba
                 op = (struct sembuf){IDX_SEM_MUTEX, +1, 0};
                 semop(id_sem, &op, 1);
 
