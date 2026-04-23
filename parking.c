@@ -59,6 +59,7 @@ int peor_ajuste(HCoche hc);
 void aparcar_commit(HCoche hc);
 void permiso_avance(HCoche hc);
 void permiso_avance_commit(HCoche hc);
+void vaciar_pos_acera(int pos, int longitud);
 void inicializar_memoria_compartida();
 void inicializacion_buzones();
 void inicializar_semaforos();
@@ -236,8 +237,17 @@ void permiso_avance_desaparcar(HCoche hc) {
                 int posicionAcera = PARKING_getPosiciOnEnAcera(hc);
                 fprintf(stderr, "[D-PKG:permiso_avance_desaparcar] Coche %d: X = %d, Y = %d, X2 = %d, Y2 = %d, Numero = %d, Longitud = %d, PosicionAcera = %d\n", hc, x, y , x2, y2, numCoche, longitudCoche, posicionAcera);
         }//fin if
+        vaciar_pos_acera(PARKING_getPosiciOnEnAcera(hc), PARKING_getLongitud(hc));
 }//fin funcion permiso_avance_commit_desaparcar
 
+void vaciar_pos_acera(int pos, int longitud) {
+        int huecoLibre = 0; // contador de posiciones libres consecutivas (para saber si el coche entra en un hueco)
+        if (pos >= 0) { // si encontro hueco
+                for (int i = pos; i < pos + longitud; i++) { // recorre las posiciones que ocupara el coche
+                        mp->acera[PRIMER_AJUSTE][i] = 0; // las marca como ocupadas (las marca con el numero de longitud del coche)
+                }//fin for
+        }//fin if
+}//fin funcion vaciar_pos_acera
 
 void inicializar_memoria_compartida(){
         // obtener tamaño de la memoria compartida
