@@ -242,9 +242,9 @@ void permiso_avance_desaparcar(HCoche hc) {
 
 void vaciar_pos_acera(int pos, int longitud) {
         int huecoLibre = 0; // contador de posiciones libres consecutivas (para saber si el coche entra en un hueco)
-        if (pos >= 0) { // si encontro hueco
+        if (pos >= 0) {
                 for (int i = pos; i < pos + longitud; i++) { // recorre las posiciones que ocupara el coche
-                        mp->acera[PRIMER_AJUSTE][i] = 0; // las marca como ocupadas (las marca con el numero de longitud del coche)
+                        mp->acera[PRIMER_AJUSTE][i] = 0; // las marca como libres
                 }//fin for
         }//fin if
 }//fin funcion vaciar_pos_acera
