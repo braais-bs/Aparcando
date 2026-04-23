@@ -32,17 +32,13 @@ volatile sig_atomic_t terminar = 0;
 volatile sig_atomic_t turno_recibido = 0;
 
 typedef struct {
-        int carril[NUM_ALGORITMOS][TAM_PARKING];
-} OCUPACION_CARRIL;
-
-typedef struct {
         int acera[NUM_ALGORITMOS][TAM_PARKING];
+        int carril[NUM_ALGORITMOS][TAM_PARKING];
         int proxAparcar[NUM_ALGORITMOS];
         int ultimoAparcado;
         int terminar;
         int n_aparcar;
         int n_desaparcar;
-        OCUPACION_CARRIL ocupacion_carril;
 } MEM_PROPIA;
 
 // variables globales
@@ -227,8 +223,8 @@ void permiso_avance(HCoche hc) {
                         op = (struct sembuf){IDX_SEM_MUTEX, -1, 0};
                         semop(id_sem, &op, 1);
 
-                        if (mp->ocupacion_carril.carril[alg][X2] == 0) {
-                                mp->ocupacion_carril.carril[alg][X2] = 1;
+                        if (mp->carril[alg][X2] == 0) {
+                                mp->carril[alg][X2] = 1;
                                 op = (struct sembuf){IDX_SEM_MUTEX, +1, 0};
                                 semop(id_sem, &op, 1);
                                 break;
@@ -241,6 +237,7 @@ void permiso_avance(HCoche hc) {
                         semop(id_sem, &op, 1);
                 }
         }
+        // avance desde la acera a la carretera
         if (Y1 < Y2 && Y2 == 2 && X2 >= 0 && X2 + PARKING_getLongitud(hc) - 1 < TAM_PARKING) {
                 struct sembuf op;
                 while (1) {
@@ -283,7 +280,7 @@ void permiso_avance_commit(HCoche hc) {
                 op = (struct sembuf){IDX_SEM_MUTEX, -1, 0};
                 semop(id_sem, &op, 1);
                 for (int i = X_anterior; i < X_anterior + PARKING_getLongitud(hc); i++) {
-                        mp->ocupacion_carril.carril[alg][i] = 0;
+                        mp->carril[alg][i] = 0;
                 }
                 op = (struct sembuf){IDX_SEM_MUTEX, +1, 0};
                 semop(id_sem, &op, 1);
@@ -299,7 +296,7 @@ void permiso_avance_commit(HCoche hc) {
                 struct sembuf op;
                 op = (struct sembuf){IDX_SEM_MUTEX, -1, 0};
                 semop(id_sem, &op, 1);
-                mp->ocupacion_carril.carril[alg][cola] = 0; // libera donde estaba
+                mp->carril[alg][cola] = 0; // libera donde estaba
                 op = (struct sembuf){IDX_SEM_MUTEX, +1, 0};
                 semop(id_sem, &op, 1);
 
@@ -312,13 +309,13 @@ void permiso_avance_commit(HCoche hc) {
 int ocupar_carril_desaparcar(int alg, int X2, int longitud) {
         // recorremos las posiciones que ocupara el coche en el carril
         for (int i = X2; i < X2 + longitud; i++) {
-                if (mp->ocupacion_carril.carril[alg][i] != 0) {
+                if (mp->carril[alg][i] != 0) {
                         return 0; // si hay alguna ocupada devolvemos 0
                 }
         }
         // si todas estan libres, las ocupamos
         for (int i = X2; i < X2 + longitud; i++) {
-                mp->ocupacion_carril.carril[alg][i] = 1;
+                mp->carril[alg][i] = 1;
         }
         return 1;
 }//fin funcion ocupar_carril_desaparcar
