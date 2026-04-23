@@ -20,15 +20,20 @@
 
 
 #define NUM_ALGORITMOS 4
-#define NUM_SEM_PROPIOS (2 + NUM_ALGORITMOS)
 #define TAM_PARKING 80
+#define NUM_SEM_PROPIOS (2 + NUM_ALGORITMOS + NUM_ALGORITMOS) // NUM_ALGORITMOS dos veces, una para los de orden y otra para los de avance
 
-#define IDX_SEM_CHOFER (nSem + 0)
+#define IDX_SEM_CHOFER (nSem)
 #define IDX_SEM_MUTEX (nSem + 1)
 #define IDX_SEM_ORDEN(a) (nSem + 2 + (a))
+#define IDX_SEM_AVANCE(a) (nSem + 2 + NUM_ALGORITMOS + (a))
 
 volatile sig_atomic_t terminar = 0;
 volatile sig_atomic_t turno_recibido = 0;
+
+typedef struct {
+        int carril[NUM_ALGORITMOS][TAM_PARKING];
+} OCUPACION_CARRIL;
 
 typedef struct {
         int acera[NUM_ALGORITMOS][TAM_PARKING];
@@ -37,6 +42,7 @@ typedef struct {
         int terminar;
         int n_aparcar;
         int n_desaparcar;
+        OCUPACION_CARRIL ocupacion_carril;
 } MEM_PROPIA;
 
 // variables globales
@@ -59,7 +65,8 @@ int peor_ajuste(HCoche hc);
 void aparcar_commit(HCoche hc);
 void permiso_avance(HCoche hc);
 void permiso_avance_commit(HCoche hc);
-void vaciar_pos_acera(int pos, int longitud);
+int ocupar_carril_desaparcar(int alg, int X2, int longitud);
+void vaciar_pos_acera(int pos, int longitud, int alg);
 void inicializar_memoria_compartida();
 void inicializacion_buzones();
 void inicializar_semaforos();
@@ -78,8 +85,12 @@ void manejar_ctrlc(int signal) {
         //=======================
         if (debug) fprintf(stderr, "[D-SIG] Señal %d recibida\n", signal);
         //=======================
-        terminar = 1; //la funcion de esto es que cuando se ejecute el programa parar los bucles de creacion de los hijos cuando se reciba ctrl-c para limpiar bien los procesos
-        system("tput cnorm"); //esto lo que hace es volver a poner el cursor "normal", ya que cuando se ejecuta el programa a veces el cursor se queda en modo "escondido" esto lo que hace es cambiarle a modo mostar
+
+        PARKING_fin(0);
+        limpiar();
+        finalizar_simulacion();  // wait de los hijos
+        system("tput cnorm");
+        exit(0); // sale del programa
 }//fin funcion manejar_ctrlc
 
 void ayudaPrograma(char *argv[]){
@@ -138,7 +149,7 @@ int primer_ajuste(HCoche hc) {
         int huecoLibre = 0; // contador de posiciones libres consecutivas (para saber si el coche entra en un hueco)
         int pos = -1; // posicion donde aparca (-1 es que no encontro hueco)
 
-        if (debug) fprintf(stderr, "[D-ALG:primer_ajuste] Coche %d - longitud=%d - buscando hueco\n", hc, longitud);
+        if (debug) fprintf(stderr, "[D-ALG:primer_ajuste] Coche %d - longitud=%d - buscando hueco\n", PARKING_getNUmero(hc), longitud);
 
         for (int i = 0; i < TAM_PARKING; ) {
                 if (mp->acera[PRIMER_AJUSTE][i] == 0) {
@@ -162,9 +173,9 @@ int primer_ajuste(HCoche hc) {
 
         if (debug) {
                 if (pos >= 0)
-                        fprintf(stderr, "[D-ALG:primer_ajuste] Coche %d -> hueco encontrado en pos=%d\n", hc, pos);
+                        fprintf(stderr, "[D-ALG:primer_ajuste] Coche %d -> hueco encontrado en pos=%d\n", PARKING_getNUmero(hc), pos);
                 else
-                        fprintf(stderr, "[D-ALG:primer_ajuste] Coche %d -> sin hueco (pos=-1)\n", hc);
+                        fprintf(stderr, "[D-ALG:primer_ajuste] Coche %d -> sin hueco (pos=-1)\n", PARKING_getNUmero(hc));
         }//fin if
 
         return pos; //
@@ -188,7 +199,7 @@ int peor_ajuste(HCoche hc) {
 //se ejecuta cuando la biblioteca confirma que el coche ha aparcado
 void aparcar_commit(HCoche hc) {
         //==========================
-        if (debug) fprintf(stderr, "[D-PKG:aparcar_commit] Coche %d aparcado\n", hc);
+        if (debug) fprintf(stderr, "[D-PKG:aparcar_commit] Coche %d aparcado\n", PARKING_getNUmero(hc));
         //==========================
         
         sem_liberar_turno(IDX_SEM_ORDEN(PARKING_getAlgoritmo(hc)), PARKING_getNUmero(hc));
@@ -196,55 +207,125 @@ void aparcar_commit(HCoche hc) {
 
 //se ejecuta cuando el coche quiere moverse. debe bloquearse hasta que sea seguro
 void permiso_avance(HCoche hc) {
-        if (debug) {
-                fprintf(stderr, "[D-PKG:permiso_avance] Coche %d pidiendo permiso para avanzar...\n", hc);
-                int x = PARKING_getX(hc);
-                int y = PARKING_getY(hc);
-                int x2 = PARKING_getX2(hc);
-                int y2 = PARKING_getX2(hc);
-                int numCoche = PARKING_getNUmero(hc);
-                int longitudCoche = PARKING_getLongitud(hc);
-                int posicionAcera = PARKING_getPosiciOnEnAcera(hc);
-                fprintf(stderr, "[D-PKG:permiso_avance] Coche %d: X = %d, Y = %d, X2 = %d, Y2 = %d, Numero = %d, Longitud = %d, PosicionAcera = %d\n", hc, x, y , x2, y2, numCoche, longitudCoche, posicionAcera);
-        }//fin if
-                //De momento como dice el enunciado solo mensaje
-                //en una version final aqui se usarian semaforos para evitar colisiones
+        if (debug) fprintf(stderr, "[D-PKG:permiso_avance] Coche %d pidiendo permiso para avanzar...\n", PARKING_getNUmero(hc));
+        
+        int X1 = PARKING_getX(hc);
+        int Y1 = PARKING_getY(hc);
+        int X2 = PARKING_getX2(hc);
+        int Y2 = PARKING_getY2(hc);
+        int alg = PARKING_getAlgoritmo(hc);
+
+        //==========================
+        if (debug) fprintf(stderr, "[D-PKG:permiso_avance] Movimiento que quiere hacer el coche %d: (%d,%d) a (%d,%d)\n", PARKING_getNUmero(hc), X1, Y1, X2, Y2);
+        //==========================
+        
+        // avance por el mismo carril
+        if (Y1 == 2 && Y2 == 2 && X2 >= 0 && X2 < TAM_PARKING) {
+                struct sembuf op;
+                while (1) {
+                        op = (struct sembuf){IDX_SEM_MUTEX, -1, 0};
+                        semop(id_sem, &op, 1);
+
+                        if (mp->ocupacion_carril.carril[alg][X2] == 0) {
+                                mp->ocupacion_carril.carril[alg][X2] = 1;
+                                op = (struct sembuf){IDX_SEM_MUTEX, +1, 0};
+                                semop(id_sem, &op, 1);
+                                break;
+                        }
+
+                        op = (struct sembuf){IDX_SEM_MUTEX, +1, 0};
+                        semop(id_sem, &op, 1);
+
+                        op = (struct sembuf){IDX_SEM_AVANCE(alg), -1, 0};
+                        semop(id_sem, &op, 1);
+                }
+        }
+        if (Y1 < Y2 && Y2 == 2 && X2 >= 0 && X2 + PARKING_getLongitud(hc) - 1 < TAM_PARKING) {
+                struct sembuf op;
+                while (1) {
+                        op = (struct sembuf){IDX_SEM_MUTEX, -1, 0};
+                        semop(id_sem, &op, 1);
+
+                        if (ocupar_carril_desaparcar(alg, X2, PARKING_getLongitud(hc))) {
+                                op = (struct sembuf){IDX_SEM_MUTEX, +1, 0};
+                                semop(id_sem, &op, 1);
+                                break;
+                        }
+
+                        op = (struct sembuf){IDX_SEM_MUTEX, +1, 0};
+                        semop(id_sem, &op, 1);
+
+                        op = (struct sembuf){IDX_SEM_AVANCE(alg), -1, 0};
+                        semop(id_sem, &op, 1);
+                }
+        }
+        
 }//fin funcion permiso_avance
 
 void permiso_avance_commit(HCoche hc) {
-        if (debug) {
-                fprintf(stderr, "[D-PKG:permiso_avance_commit] Coche %d ha avanzado con éxito.\n", hc);
-                int x = PARKING_getX(hc);
-                int y = PARKING_getY(hc);
-                int x2 = PARKING_getX2(hc);
-                int y2 = PARKING_getX2(hc);
-                int numCoche = PARKING_getNUmero(hc);
-                int longitudCoche = PARKING_getLongitud(hc);
-                int posicionAcera = PARKING_getPosiciOnEnAcera(hc);
-                fprintf(stderr, "[D-PKG:permiso_avance_commit] Coche %d: X = %d, Y = %d, X2 = %d, Y2 = %d, Numero = %d, Longitud = %d, PosicionAcera = %d\n", hc, x, y , x2, y2, numCoche, longitudCoche, posicionAcera);
+        int X_anterior = PARKING_getX2(hc); // de donde venia el coche
+        int Y_anterior = PARKING_getY2(hc);
+        int Y_actual = PARKING_getY(hc);
+        int alg = PARKING_getAlgoritmo(hc);
+
+        if (debug) fprintf(stderr, "[D-PKG:permiso_avance_commit] Coche %d avanzó a (%d,%d), venía de (%d,%d)\n", PARKING_getNUmero(hc), PARKING_getX(hc), Y_actual, X_anterior, Y_anterior);
+
+        // libera si el coche desaparca del carril
+        if (Y_anterior == 1 && Y_actual == 2) {
+                vaciar_pos_acera(PARKING_getPosiciOnEnAcera(hc), PARKING_getLongitud(hc), alg);
+        }
+
+        // libera si el coche sale del carril para aparcar
+        if (Y_anterior == 2 && Y_actual == 1 && X_anterior >= 0 && X_anterior + PARKING_getLongitud(hc) - 1 < TAM_PARKING) {
+                struct sembuf op;
+
+                op = (struct sembuf){IDX_SEM_MUTEX, -1, 0};
+                semop(id_sem, &op, 1);
+                for (int i = X_anterior; i < X_anterior + PARKING_getLongitud(hc); i++) {
+                        mp->ocupacion_carril.carril[alg][i] = 0;
+                }
+                op = (struct sembuf){IDX_SEM_MUTEX, +1, 0};
+                semop(id_sem, &op, 1);
+
+                op = (struct sembuf){IDX_SEM_AVANCE(alg), +1, 0};
+                semop(id_sem, &op, 1);
+        }
+
+        // libera si el coche se mueve en horizontal en el mismo carril
+        if (Y_anterior == 2 && Y_actual == 2 && X_anterior < TAM_PARKING) {
+                int cola = X_anterior + PARKING_getLongitud(hc) - 1;
+
+                struct sembuf op;
+                op = (struct sembuf){IDX_SEM_MUTEX, -1, 0};
+                semop(id_sem, &op, 1);
+                mp->ocupacion_carril.carril[alg][cola] = 0; // libera donde estaba
+                op = (struct sembuf){IDX_SEM_MUTEX, +1, 0};
+                semop(id_sem, &op, 1);
+
+                // despertar a los que esperan esta posición
+                op = (struct sembuf){IDX_SEM_AVANCE(alg), +1, 0};
+                semop(id_sem, &op, 1);
         }//fin if
 }//fin funcion mi_permiso_avance_commit
 
-void permiso_avance_desaparcar(HCoche hc) {
-        if (debug) {
-                fprintf(stderr, "[D-PKG:permiso_avance_desaparcar] Coche %d ha avanzado con éxito.\n", hc);
-                int x = PARKING_getX(hc);
-                int y = PARKING_getY(hc);
-                int x2 = PARKING_getX2(hc);
-                int y2 = PARKING_getX2(hc);
-                int numCoche = PARKING_getNUmero(hc);
-                int longitudCoche = PARKING_getLongitud(hc);
-                int posicionAcera = PARKING_getPosiciOnEnAcera(hc);
-                fprintf(stderr, "[D-PKG:permiso_avance_desaparcar] Coche %d: X = %d, Y = %d, X2 = %d, Y2 = %d, Numero = %d, Longitud = %d, PosicionAcera = %d\n", hc, x, y , x2, y2, numCoche, longitudCoche, posicionAcera);
-        }//fin if
-        vaciar_pos_acera(PARKING_getPosiciOnEnAcera(hc), PARKING_getLongitud(hc));
-}//fin funcion permiso_avance_commit_desaparcar
+int ocupar_carril_desaparcar(int alg, int X2, int longitud) {
+        // recorremos las posiciones que ocupara el coche en el carril
+        for (int i = X2; i < X2 + longitud; i++) {
+                if (mp->ocupacion_carril.carril[alg][i] != 0) {
+                        return 0; // si hay alguna ocupada devolvemos 0
+                }
+        }
+        // si todas estan libres, las ocupamos
+        for (int i = X2; i < X2 + longitud; i++) {
+                mp->ocupacion_carril.carril[alg][i] = 1;
+        }
+        return 1;
+}//fin funcion ocupar_carril_desaparcar
 
-void vaciar_pos_acera(int pos, int longitud) {
-        int huecoLibre = 0; // contador de posiciones libres consecutivas (para saber si el coche entra en un hueco)
+void vaciar_pos_acera(int pos, int longitud, int alg) {
         if (pos >= 0) {
                 for (int i = pos; i < pos + longitud; i++) { // recorre las posiciones que ocupara el coche
-                        mp->acera[PRIMER_AJUSTE][i] = 0; // las marca como libres
+                        mp->acera[alg][i] = 0; // las marca como libres
                 }//fin for
         }//fin if
 }//fin funcion vaciar_pos_acera
@@ -306,6 +387,7 @@ void inicializar_semaforos(){
 
         for (int i = 0; i < NUM_ALGORITMOS; i++) {
                 semctl(id_sem, IDX_SEM_ORDEN(i), SETVAL, 1);
+                semctl(id_sem, IDX_SEM_AVANCE(i), SETVAL, 0);
         }//fin for
 }//fin funcion incializar_semaforos
 
@@ -334,10 +416,10 @@ void limpiar(void) {
         if (mem_base != NULL && mem_base != (char *)-1) {
                 shmdt(mem_base);
         }//fin if
-        if (id_mem   != -1) {
+        if (id_mem != -1) {
                 shmctl(id_mem,   IPC_RMID, NULL);
         }//fin if
-        if (id_sem   != -1) {
+        if (id_sem != -1) {
                 semctl(id_sem, 0, IPC_RMID);
         }//fin if
         if (id_buzon != -1) {
@@ -422,7 +504,7 @@ void bucle_chofer(){
                         PARKING_desaparcar(
                                 msg.hCoche,
                                 &alg_aux,
-                                permiso_avance_desaparcar,
+                                permiso_avance,
                                 permiso_avance_commit
                         );
                 }//fin else if
@@ -455,13 +537,18 @@ void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[]){
 }//fin funcion inicializar_simulacion
 
 void finalizar_simulacion(){
+        // si la terminación es normal (pasaron 30s) se destruye el buzón para que los hijos salgan de msgrcv
+        if (id_buzon != -1) {
+                msgctl(id_buzon, IPC_RMID, NULL);
+                id_buzon = -1;
+        }//fin if
+        
         // esperar a que todos los hijos terminen antes de que el padre muera
         int status;
         pid_t pid_muerto;
         // esto luego seria mas sencillo pero para el mensaje de debug es necesario
         while ((pid_muerto = wait(&status)) > 0) {
-                if (debug) fprintf(stderr, "[D-PADRE] Hijo PID=%d recogido, exit=%d\n",
-                                pid_muerto, WEXITSTATUS(status));
+                if (debug) fprintf(stderr, "[D-PADRE] Hijo PID=%d recogido, exit=%d\n", pid_muerto, WEXITSTATUS(status));
         }//fin while
 
         if (debug) fprintf(stderr, "[D-PADRE] PID=%d muriendo\n", getpid());
