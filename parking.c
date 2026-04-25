@@ -185,40 +185,182 @@ int primer_ajuste(HCoche hc) {
                         if (huecoLibre >= longitud) { // si el hueco libre (posiciones seguidas) es mayor o igual que la longitud del coche
                                 pos = i - longitud + 1; // calcula el inicio del hueco
                                 break;
-                        }
+                        }// fin if
                         i++;
-                } else {
+                }//fin fin if
+                else {
                         i += mp->acera[PRIMER_AJUSTE][i]; // NOTA BRAIS: esto es un aoptimizacion que meti ahora. antes hacia un for con i++ que iba posicion por posicion. Ahora, si encuentro un coche aparcado, salta las posiciones que ocupe ese coche (por eso de que en el coche para indicar que una posicion esta ocupada se guarda la longitud del coche)
                         huecoLibre = 0; // si mp->acera en algun momento no da 0, se reinicia el contador
-                }
-        }
+                }//fin else
+        }//fin for
 
         if (pos >= 0) { // si encontro hueco
                 for (int i = pos; i < pos + longitud; i++) { // recorre las posiciones que ocupara el coche
                         mp->acera[PRIMER_AJUSTE][i] = longitud; // las marca como ocupadas (las marca con el numero de longitud del coche)
-                }
-        }
-
-        if (debug) {
-                if (pos >= 0)
-                        fprintf(stderr, "[D-ALG:primer_ajuste] Coche %d -> hueco encontrado en pos=%d\n", PARKING_getNUmero(hc), pos);
-                else
-                        fprintf(stderr, "[D-ALG:primer_ajuste] Coche %d -> sin hueco (pos=-1)\n", PARKING_getNUmero(hc));
+                }//fin for
         }//fin if
 
-        return pos; //
+        if (debug) {
+                (pos >= 0) ? fprintf(stderr, "[D-ALG:primer_ajuste] Coche %d -> hueco encontrado en pos=%d\n", PARKING_getNUmero(hc), pos)
+                : fprintf(stderr, "[D-ALG:primer_ajuste] Coche %d -> sin hueco (pos=-1)\n", PARKING_getNUmero(hc));
+        }//fin if
+
+        return pos;
 }//fin funcion primer_ajuste
 
 int siguiente_ajuste(HCoche hc) {
-        return -2; // de momento no queremos que funcione
+        int longitud = PARKING_getLongitud(hc);
+        int huecoLibre = 0;
+        int pos = -1;
+
+        if (debug) fprintf(stderr, "[D-ALG:siguiente_ajuste] Coche %d - longitud=%d - buscando hueco\n", PARKING_getNUmero(hc), longitud);
+        
+        // obtencion desde donde empezar
+        int inicio = mp->proxAparcar[SIGUIENTE_AJUSTE];
+
+        // requisito del pdf hay que retroceder al comienzo del hueco si la posicion esta libre
+        //   (porque el coche que estaba ahi ya se fue).
+        while (inicio > 0 && mp->acera[SIGUIENTE_AJUSTE][inicio] == 0 && mp->acera[SIGUIENTE_AJUSTE][inicio - 1] == 0) {
+                inicio--;
+        }//fin while
+
+        // primera pasada es igual que el primer_ajuste, pero empezando en 'inicio'
+        for (int i = inicio; i < TAM_PARKING; ) {
+                if (mp->acera[SIGUIENTE_AJUSTE][i] == 0) {
+                        huecoLibre++;
+                        if (huecoLibre >= longitud) {
+                                pos = i - longitud + 1;
+                                break;
+                        }//fin if
+                        i++;
+                }//fin if
+                else {
+                        i += mp->acera[SIGUIENTE_AJUSTE][i]; // Tu optimización
+                        huecoLibre = 0;
+                }//fin else
+        }//fin for
+
+        // segunda pasada: si no encontro hueco, igual que primer_ajuste pero
+        //   buscando desde el principio (0) hasta 'inicio'
+        if (pos == -1) {
+                huecoLibre = 0; // Reiniciamos el contador de hueco libre
+                for (int i = 0; i < inicio; ) {
+                        if (mp->acera[SIGUIENTE_AJUSTE][i] == 0) {
+                                huecoLibre++;
+                                if (huecoLibre >= longitud) {
+                                        pos = i - longitud + 1;
+                                        break;
+                                }//fin if
+                                i++;
+                        }// fin if
+                        else {
+                                i += mp->acera[SIGUIENTE_AJUSTE][i]; // Tu optimización
+                                huecoLibre = 0;
+                        }//fin else
+                }//fin for
+        }//fin if
+
+        // guardado de datos
+        if (pos >= 0) {
+                for (int i = pos; i < pos + longitud; i++) {
+                        mp->acera[SIGUIENTE_AJUSTE][i] = longitud;
+                }//fin for
+                mp->proxAparcar[SIGUIENTE_AJUSTE] = (pos + longitud) % TAM_PARKING;
+        }//fin if
+
+        if (debug) {
+                (pos >= 0) ? fprintf(stderr, "[D-ALG:siguiente_ajuste] Coche %d -> hueco encontrado en pos=%d\n", PARKING_getNUmero(hc), pos)
+                : fprintf(stderr, "[D-ALG:siguiente_ajuste] Coche %d -> sin hueco (pos=-1)\n", PARKING_getNUmero(hc));
+        }//fin if
+
+        return pos;
 }//fin funcion siguiente_ajuste
 
 int mejor_ajuste(HCoche hc) {
-        return -2; // de momento no queremos que funcione
+        int longitud = PARKING_getLongitud(hc);
+        int pos = -1;
+
+        int huecoActual = 0;
+        int inicioHuecoActual = -1;
+        int mejorTamano = TAM_PARKING + 1; // inicializacion a un valor mayor que el parking
+
+        if (debug) fprintf(stderr, "[D-ALG:mejor_ajuste] Coche %d - longitud=%d\n", PARKING_getNUmero(hc), longitud);
+
+        for (int i = 0; i < TAM_PARKING; i++) {
+                if (mp->acera[MEJOR_AJUSTE][i] == 0) {
+                        if (huecoActual == 0)
+                                inicioHuecoActual = i; // Guardamos donde empieza
+                        huecoActual++;
+                } //fin if
+                else {
+                        // cuando se choca con un coche. se evalua el hueco que deja atras
+                        if (huecoActual >= longitud) {
+                                if (huecoActual < mejorTamano) { //nos quedamos con el mas pequenno
+                                        mejorTamano = huecoActual;
+                                        pos = inicioHuecoActual;
+                                }//fin if
+                        }//fin if
+                        huecoActual = 0; // reiniciamos contador
+                }//fin else
+        }//fin for
+
+        // evaluar el ultimo hueco si el array termino en 0
+        if (huecoActual >= longitud) {
+                if (huecoActual < mejorTamano) {
+                        mejorTamano = huecoActual;
+                        pos = inicioHuecoActual;
+                }//fin if
+        }//fin if
+
+        // guardado de datos
+        if (pos >= 0) { 
+                for (int i = pos; i < pos + longitud; i++)
+                        mp->acera[MEJOR_AJUSTE][i] = longitud;
+        }//fin if
+
+        return pos;
 }//fin funcion mejor_ajuste
 
 int peor_ajuste(HCoche hc) {
-        return -2; // de momento no queremos que funcione
+        int longitud = PARKING_getLongitud(hc);
+        int pos = -1;
+
+        int huecoActual = 0;
+        int inicioHuecoActual = -1;
+        int peorTamano = -1; // Inicializamos a un valor muy pequeño
+
+        if (debug) fprintf(stderr, "[D-ALG:peor_ajuste] Coche %d - longitud=%d\n", PARKING_getNUmero(hc), longitud);
+
+        for (int i = 0; i < TAM_PARKING; i++) {
+                if (mp->acera[PEOR_AJUSTE][i] == 0) {
+                        if (huecoActual == 0)
+                                inicioHuecoActual = i;
+                        huecoActual++;
+                } //fin if
+                else {
+                        if (huecoActual >= longitud) {
+                                if (huecoActual > peorTamano) { //nos quedamos con el mas grande
+                                        peorTamano = huecoActual;
+                                        pos = inicioHuecoActual;
+                                }//fin if
+                        }//fin if
+                        huecoActual = 0;
+                }//fin else
+        }//fin for
+
+        if (huecoActual >= longitud) {
+                if (huecoActual > peorTamano) {
+                        peorTamano = huecoActual;
+                        pos = inicioHuecoActual;
+                }//fin if
+        }//fin if
+
+        if (pos >= 0) {
+                for (int i = pos; i < pos + longitud; i++)
+                        mp->acera[PEOR_AJUSTE][i] = longitud;
+        }//fin if
+
+        return pos;
 }//fin funcion peor_ajuste
 
 
@@ -246,7 +388,7 @@ void permiso_avance(HCoche hc) {
         //==========================
         if (debug) fprintf(stderr, "[D-PKG:permiso_avance] Movimiento que quiere hacer el coche %d: (%d,%d) a (%d,%d)\n", PARKING_getNUmero(hc), X1, Y1, X2, Y2);
         //==========================
-        
+
         // avance por el mismo carril
         if (Y1 == 2 && Y2 == 2 && X2 >= 0 && X2 < TAM_PARKING) {
                 struct sembuf op;
@@ -259,15 +401,15 @@ void permiso_avance(HCoche hc) {
                                 op = (struct sembuf){IDX_SEM_MUTEX, +1, 0};
                                 semop(id_sem, &op, 1);
                                 break;
-                        }
+                        }//fin if
 
                         op = (struct sembuf){IDX_SEM_MUTEX, +1, 0};
                         semop(id_sem, &op, 1);
 
                         op = (struct sembuf){IDX_SEM_AVANCE(alg), -1, 0};
                         semop(id_sem, &op, 1);
-                }
-        }
+                }//fin while
+        }//fin if
         // avance desde la acera a la carretera
         if (Y1 < Y2 && Y2 == 2 && X2 >= 0 && X2 + PARKING_getLongitud(hc) - 1 < TAM_PARKING) {
                 struct sembuf op;
@@ -279,16 +421,16 @@ void permiso_avance(HCoche hc) {
                                 op = (struct sembuf){IDX_SEM_MUTEX, +1, 0};
                                 semop(id_sem, &op, 1);
                                 break;
-                        }
+                        }//fin if
 
                         op = (struct sembuf){IDX_SEM_MUTEX, +1, 0};
                         semop(id_sem, &op, 1);
 
                         op = (struct sembuf){IDX_SEM_AVANCE(alg), -1, 0};
                         semop(id_sem, &op, 1);
-                }
-        }
-        
+                }//fin while
+        }// fin fi
+
 }//fin funcion permiso_avance
 
 void permiso_avance_commit(HCoche hc) {
@@ -300,7 +442,7 @@ void permiso_avance_commit(HCoche hc) {
         if (debug) fprintf(stderr, "[D-PKG:permiso_avance_commit] Coche %d avanzó a (%d,%d), venía de (%d,%d)\n", PARKING_getNUmero(hc), PARKING_getX(hc), Y_actual, X_anterior, Y_anterior);
 
         // libera si el coche desaparca del carril
-        if (Y_anterior == 1 && Y_actual == 2) {
+        if (Y_anterior == 1 && Y_actual == 2) {               
                 vaciar_pos_acera(PARKING_getPosiciOnEnAcera(hc), PARKING_getLongitud(hc), alg);
         }
 
@@ -324,19 +466,21 @@ void permiso_avance_commit(HCoche hc) {
         if (Y_anterior == 2 && Y_actual == 2 && X_anterior < TAM_PARKING) {
                 int final_coche = X_anterior + PARKING_getLongitud(hc) - 1;
 
-                struct sembuf op;
-                op = (struct sembuf){IDX_SEM_MUTEX, -1, 0};
-                semop(id_sem, &op, 1);
-                mp->carril[alg][final_coche] = 0; // libera donde estaba
+                if (final_coche >= 0 && final_coche < TAM_PARKING) {
+                        struct sembuf op;
+                        op = (struct sembuf){IDX_SEM_MUTEX, -1, 0};
+                        semop(id_sem, &op, 1);
+                        mp->carril[alg][final_coche] = 0; // libera donde estaba
 
-                op = (struct sembuf){IDX_SEM_MUTEX, +1, 0};
-                semop(id_sem, &op, 1);
+                        op = (struct sembuf){IDX_SEM_MUTEX, +1, 0};
+                        semop(id_sem, &op, 1);
 
-                // despertar a los que esperan esta posición
-                op = (struct sembuf){IDX_SEM_AVANCE(alg), +1, 0};
-                semop(id_sem, &op, 1);
+                        // despertar a los que esperan esta posición
+                        op = (struct sembuf){IDX_SEM_AVANCE(alg), +1, 0};
+                        semop(id_sem, &op, 1);
+                }//fin if
         }//fin if
-}//fin funcion mi_permiso_avance_commit
+}//fin funcion permiso_avance_commit
 
 int ocupar_carril_desaparcar(int alg, int X2, int longitud) {
         // recorremos las posiciones que ocupara el coche en el carril
@@ -569,12 +713,8 @@ void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[]){
         if (debug) {
                 fprintf(stderr, "[D-IPC] IPC creados -> SHM:%d SEM:%d MSG:%d\n", id_mem, id_sem, id_buzon);
                 fprintf(stderr, "[D-PKG] PARKING_inicio retornó: %d\n", resultado);
-                if (resultado == 0) {
-                        fprintf(stderr, "[D-PKG] PARKING_inicio funciona correctamente\n");
-                }//fin if
-                else {
-                        fprintf(stderr, "[D-PKG] PARKING_inicio falló\n");
-                }//fin else
+                (resultado == 0) ? fprintf(stderr, "[D-PKG] PARKING_inicio funciona correctamente\n")
+                : fprintf(stderr, "[D-PKG] PARKING_inicio falló\n");
         }//fin if
         //===========================================================
 
