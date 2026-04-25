@@ -1,9 +1,10 @@
 /*
-* Sistemas Operativos II - Práctica Linux - Aparcando
-* Curso: 2025-2026
-* Práctica Linux de Grupo
-* Autores: Brais Bértolo Senra, Juan Riego Vila
+* Sistemas Operativos II Práctica Linux - Aparcando
+* Primera Convocatoria - Curso 2025-2026
+* Grupo: G08 - Brais Bértolo Senra, Juan Riego Vila
+* Fecha: 26/04/2026
 */
+
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,14 +36,10 @@ typedef struct {
         int acera[NUM_ALGORITMOS][TAM_PARKING];
         int carril[NUM_ALGORITMOS][TAM_PARKING];
         int proxAparcar[NUM_ALGORITMOS];
-        int ultimoAparcado;
-        int terminar;
-        int n_aparcar;
-        int n_desaparcar;
 } MEM_PROPIA;
 
 // variables globales
-int retardo, num_choferes, debug, prio_PA, prio_PD; // (estas lueog lo suyo seria hacer un struct)
+int retardo, num_choferes, debug, prio_PA, prio_PD;
 int id_mem = -1, id_sem = -1, id_buzon = -1;  // -1 indica que aun no se crearon
 int nSem, tam;
 
@@ -646,27 +643,41 @@ void bucle_chofer(){
         struct PARKING_mensajeBiblioteca msg;
         int alg_aux;
 
-        /*hay que pasar la informacion a los callbacks (como
-            por ejemplo el algoritmo que sea), utilizo una
-            variable para pasarla por el puntero void *datos.
-        */
         while (1) {
-                // si el buzon se limpia y msgrcv falla, salimos
-                if (msgrcv(id_buzon, &msg, sizeof(msg) - sizeof(long), 0, 0) == -1) {
-                        break;
-                }//fin if
-                // imprime lo que llegó
+                int msg_prioritario;
+
+                if (prio_PA) {
+                        // intenta leer un mensaje de aparcar
+                        msg_prioritario = msgrcv(id_buzon, &msg, sizeof(msg) - sizeof(long), PARKING_MSGSUB_APARCAR, IPC_NOWAIT);
+                        
+                        // si no habia mensaje de aparcar, lee cualquiera bloqueandose
+                        if (msg_prioritario == -1 && errno == ENOMSG) {
+                                msg_prioritario = msgrcv(id_buzon, &msg, sizeof(msg) - sizeof(long), 0, 0);
+                        }//fin if
+                } else if (prio_PD) {
+                        // intenta leer un mensaje de desaparcar
+                        msg_prioritario = msgrcv(id_buzon, &msg, sizeof(msg) - sizeof(long), PARKING_MSGSUB_DESAPARCAR, IPC_NOWAIT);
+
+                        if (msg_prioritario == -1 && errno == ENOMSG) {
+                                // no habia desaparcares, lee cualquiera bloqueandose
+                                msg_prioritario = msgrcv(id_buzon, &msg, sizeof(msg) - sizeof(long), 0, 0);
+                        }//fin if                       
+                } else {
+                        // fifo normal
+                        msg_prioritario = msgrcv(id_buzon, &msg, sizeof(msg) - sizeof(long), 0, 0);
+                }//fin else
+
+                // si el buzón ya no existe o hay otro error
+                if (msg_prioritario == -1) break;
+                
                 if (debug) fprintf(stderr, "[D-CHOFER] tipo=%ld subtipo=%ld coche=%d\n", msg.tipo, msg.subtipo, msg.hCoche);
 
-                //subtipo para representar el indice del algoritmo (0 a 3) 
-                //NOTA BRAIS: EN el .h hay un int PARKING_getAlgoritmo(HCoche), por el nombre te diria que va aqui, no se con lo que tu tienes si también va, lo comento por que estuve mirando el .h
                 alg_aux = PARKING_getAlgoritmo(msg.hCoche);
 
                 if (msg.subtipo == PARKING_MSGSUB_APARCAR) {
                         //==========================
                         if (debug) {
-                            fprintf(stderr, "[D-CHOFER: aparcar] PID=%d -> Coche %d quiere aparcar\n", getpid(), msg.hCoche);
-                            fprintf(stderr, "[DBUZON-CHOFER: aparcar] PID=%d -> Coche %d: msg_tipo = %li, msg_subtipo = %li\n", getpid(), msg.hCoche, msg.tipo, msg.subtipo);
+                                fprintf(stderr, "[D-CHOFER: aparcar] PID=%d -> Coche %d: msg_tipo = %li (aparcarr), msg_subtipo = %li\n", getpid(), msg.hCoche, msg.tipo, msg.subtipo);
                         }//fin if
                         //==========================
 
@@ -676,7 +687,6 @@ void bucle_chofer(){
                         //==========================
                         if (debug) {
                                 fprintf(stderr, "[D-CHOFER: aparcar] PID=%d -> Coche %d ya puede aparcar\n", getpid(), msg.hCoche);
-                                fprintf(stderr, "[DBUZON-CHOFER: aparcar] PID=%d -> Coche %d: msg_tipo = %li, msg_subtipo = %li\n", getpid(), msg.hCoche, msg.tipo, msg.subtipo);
                         }//fin if
                         //==========================
 
@@ -690,8 +700,7 @@ void bucle_chofer(){
                 } else if (msg.subtipo == PARKING_MSGSUB_DESAPARCAR) {
                         //==========================
                         if (debug){
-                                fprintf(stderr, "[D-CHOFER: desaparcar] PID=%d -> Coche %d va a desaparcar\n", getpid(), msg.hCoche);
-                                fprintf(stderr, "[DBUZON-CHOFER: desaparcar] PID=%d -> Coche %d: msg_tipo = %li, msg_subtipo = %li\n", getpid(), msg.hCoche, msg.tipo, msg.subtipo);
+                                fprintf(stderr, "[D-CHOFER: desaparcar] PID=%d -> Coche %d: msg_tipo = %li (desaparcar), msg_subtipo = %li\n", getpid(), msg.hCoche, msg.tipo, msg.subtipo);
                         }//fin if
                         //==========================
 
@@ -730,10 +739,15 @@ void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[]){
 }//fin funcion inicializar_simulacion
 
 void finalizar_simulacion(){
-        // si la terminación es normal (pasaron 30s) se destruye el buzón para que los hijos salgan de msgrcv
+        // permitimos a los hijos salir de buzones y semaforos si estaban bloqueados esperando
         if (id_buzon != -1) {
                 msgctl(id_buzon, IPC_RMID, NULL);
                 id_buzon = -1;
+        }//fin if
+
+        if (id_sem != -1) {
+                semctl(id_sem, 0, IPC_RMID);
+                id_sem = -1;
         }//fin if
         
         // esperar a que todos los hijos terminen antes de que el padre muera
