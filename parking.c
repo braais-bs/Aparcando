@@ -50,8 +50,13 @@ MEM_PROPIA *mp = NULL;
 
 pid_t flag_avisador = -1;
 
+//para controlar la parte de prioridad segun como se invoque el programa (FIFO, PA o PD)
+pid_t flag_gestor = -1;
+
 
 // declaracion de los prototipos de las funciones
+void proceso_gestor();
+void crear_gestor();
 void manejar_ctrlc(int signal);
 void manejar_alarma(int sig);
 void proceso_avisador();
@@ -80,6 +85,55 @@ void finalizar_simulacion();
 void parking();
 int main(int argc, char *argv[]);
 
+void proceso_gestor() {
+        struct PARKING_mensajeBiblioteca msg;
+
+        while (1) {
+                //lee SOLO los mensajes originales de la biblioteca (PARKING_MSG = 100)
+                if (msgrcv(id_buzon, &msg, sizeof(msg) - sizeof(long), PARKING_MSG, 0) == -1) {
+                        if (errno == EINTR) continue; //si es una sennal, reintenta
+                        break; //si se borra la cola (fin simulación), sale del bucle
+                }//fin if
+
+                //renumera el tipo de mensaje segun las banderas prio_PA o prio_PD
+                if (prio_PA) {
+                        //prioridad aparcar (PA): aparcar es 1 (alta), desaparcar es 2 (baja)
+                        msg.tipo = (msg.subtipo == PARKING_MSGSUB_APARCAR) ? 1 : 2;
+                } else if (prio_PD) {
+                        // prioridad desaparcar (PD): desaparcar es 1 (alta), aparcar es 2 (baja)
+                        msg.tipo = (msg.subtipo == PARKING_MSGSUB_DESAPARCAR) ? 1 : 2;
+                } else {
+                        // fifo normal (sin argumento): todos tienen la misma prioridad (1)
+                        msg.tipo = 1;
+                }//fin else
+
+                if (debug) fprintf(stderr, "[D-GESTOR] Renumerado: Coche %d -> Nuevo Tipo %ld\n", PARKING_getNUmero(msg.hCoche), msg.tipo);
+
+                //reenvia el mensaje a la cola con la nueva prioridad
+                if (msgsnd(id_buzon, &msg, sizeof(msg) - sizeof(long), 0) == -1) {
+                        break; //si falla al enviar (ej. buzon borrado), se sale
+                }//fin if
+        }//fin while
+
+        exit(0);
+}//fin funcion proceso_gestor
+
+void crear_gestor() {
+        pid_t pid_gestor = fork();
+
+        if (pid_gestor < 0) {
+                perror("fork gestor");
+                limpiar();
+                exit(1);
+        }//fin if
+
+        if (pid_gestor == 0) {
+                signal(SIGINT, SIG_IGN); //ignora ctrl+c, morira solo al borrarse el buzon
+                proceso_gestor();
+        }//fin if
+
+        flag_gestor = pid_gestor;
+}//fin funcion crear_gestor
 
 void manejar_ctrlc(int signal) {
         //=======================
@@ -650,32 +704,12 @@ void bucle_chofer(){
         int alg_aux;
 
         while (1) {
-                int msg_prioritario;
+                // -> MAGIA DE UNIX: Al pedir el tipo -2, el SO nos da primero los mensajes
+                // de tipo 1 (alta prioridad), y si no hay, los de tipo 2 (baja prioridad).
+                if (msgrcv(id_buzon, &msg, sizeof(msg) - sizeof(long), -2, 0) == -1) {
+                        break; // Si se borra la cola, el chófer muere limpiamente
+                }//fin if
 
-                if (prio_PA) {
-                        // intenta leer un mensaje de aparcar
-                        msg_prioritario = msgrcv(id_buzon, &msg, sizeof(msg) - sizeof(long), PARKING_MSGSUB_APARCAR, IPC_NOWAIT);
-                        
-                        // si no habia mensaje de aparcar, lee cualquiera bloqueandose
-                        if (msg_prioritario == -1 && errno == ENOMSG) {
-                                msg_prioritario = msgrcv(id_buzon, &msg, sizeof(msg) - sizeof(long), 0, 0);
-                        }//fin if
-                } else if (prio_PD) {
-                        // intenta leer un mensaje de desaparcar
-                        msg_prioritario = msgrcv(id_buzon, &msg, sizeof(msg) - sizeof(long), PARKING_MSGSUB_DESAPARCAR, IPC_NOWAIT);
-
-                        if (msg_prioritario == -1 && errno == ENOMSG) {
-                                // no habia desaparcares, lee cualquiera bloqueandose
-                                msg_prioritario = msgrcv(id_buzon, &msg, sizeof(msg) - sizeof(long), 0, 0);
-                        }//fin if                       
-                } else {
-                        // fifo normal
-                        msg_prioritario = msgrcv(id_buzon, &msg, sizeof(msg) - sizeof(long), 0, 0);
-                }//fin else
-
-                // si el buzón ya no existe o hay otro error
-                if (msg_prioritario == -1) break;
-                
                 if (debug) fprintf(stderr, "[D-CHOFER] tipo=%ld subtipo=%ld coche=%d\n", msg.tipo, msg.subtipo, msg.hCoche);
 
                 alg_aux = PARKING_getAlgoritmo(msg.hCoche);
@@ -754,6 +788,9 @@ void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[]){
 
         // creacion del proceso avisador
         crear_avisador();
+
+        // para controlar como se gestionan las prioridades dependiendo de como el usuario invoque el programa
+        crear_gestor();
 
         //creacion de los choferes
         for(int i=0; i < num_choferes; i++){
