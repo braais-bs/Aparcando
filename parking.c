@@ -178,8 +178,8 @@ void ayudaPrograma(char *argv[]){
         printf("=====AYUDA PROGRAMA [%s]=====\n",argv[0]);
         printf("Ejemplo uso:\n");
         printf("\t%s [numero de retardo] [numero de choferes] [tipo de politica]\n", argv[0]);
-        printf("\t  - [numero de retardo]-> Tiene que ser mayor de 0, no hay limites con la velocidad, cuanto mas bajo sea el numero mas lento se ejecutara.\n");
-        printf("\t  - [numero de choferes]-> Tiene que ser mayor de 0, no hay limites con la cantidad de procesos chofer.\n");
+        printf("\t  - [numero de retardo]-> Tiene que ser mayor o igual a 0, no hay limites con la velocidad, cuanto mas bajo sea el numero mas lento se ejecutara.\n");
+        printf("\t  - [numero de choferes]-> Tiene que ser mayor o igual a 0, no hay limites con la cantidad de procesos chofer.\n");
         printf("\t  - [tipo de politica]-> Hay tres tipos de politica:.\n");
         printf("\t\t + FIFO: Si no se introduce argumento de politica es el que se ejecutara.\n");
         printf("\t\t + PA: Prioridad al Aparcar, se manejaran los mensajes de tal forma que los coches den prioridad a aparcar.\n");
