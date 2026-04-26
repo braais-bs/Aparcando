@@ -22,12 +22,14 @@
 
 #define NUM_ALGORITMOS 4
 #define TAM_PARKING 80
-#define NUM_SEM_PROPIOS (2 + NUM_ALGORITMOS + NUM_ALGORITMOS) // NUM_ALGORITMOS dos veces, una para los de orden y otra para los de avance
+#define NUM_SEM_PROPIOS (2 + NUM_ALGORITMOS + NUM_ALGORITMOS +1) // NUM_ALGORITMOS dos veces, una para los de orden y otra para los de avance
 
 #define IDX_SEM_CHOFER (nSem)
 #define IDX_SEM_MUTEX (nSem + 1)
 #define IDX_SEM_ORDEN(a) (nSem + 2 + (a))
 #define IDX_SEM_AVANCE(a) (nSem + 2 + NUM_ALGORITMOS + (a))
+#define IDX_SEM_CHOFERES_ACTIVOS (nSem + 2 + NUM_ALGORITMOS + NUM_ALGORITMOS)
+
 
 volatile sig_atomic_t terminar = 0;
 volatile sig_atomic_t turno_recibido = 0;
@@ -216,10 +218,13 @@ int siguiente_ajuste(HCoche hc) {
         int inicio = mp->proxAparcar[SIGUIENTE_AJUSTE];
 
         // requisito del pdf hay que retroceder al comienzo del hueco si la posicion esta libre
-        //   (porque el coche que estaba ahi ya se fue).
-        while (inicio > 0 && mp->acera[SIGUIENTE_AJUSTE][inicio] == 0 && mp->acera[SIGUIENTE_AJUSTE][inicio - 1] == 0) {
-                inicio--;
-        }//fin while
+        //(porque el coche que estaba ahi ya se fue).
+        if (mp->acera[SIGUIENTE_AJUSTE][inicio] == 0) {
+                // retroceder al inicio del hueco donde esta inicio
+                while (inicio > 0 && mp->acera[SIGUIENTE_AJUSTE][inicio - 1] == 0) {
+                        inicio--;
+                }
+        }
 
         // primera pasada es igual que el primer_ajuste, pero empezando en 'inicio'
         for (int i = inicio; i < TAM_PARKING; ) {
@@ -555,6 +560,7 @@ void inicializar_semaforos(){
         // inicializar semaforos propios
         semctl(id_sem, IDX_SEM_CHOFER, SETVAL, 0);
         semctl(id_sem, IDX_SEM_MUTEX, SETVAL, 1);
+        semctl(id_sem, IDX_SEM_CHOFERES_ACTIVOS, SETVAL, 0);
 
         for (int i = 0; i < NUM_ALGORITMOS; i++) {
                 semctl(id_sem, IDX_SEM_ORDEN(i), SETVAL, 1);
@@ -675,6 +681,8 @@ void bucle_chofer(){
                 alg_aux = PARKING_getAlgoritmo(msg.hCoche);
 
                 if (msg.subtipo == PARKING_MSGSUB_APARCAR) {
+                        struct sembuf op;
+
                         //==========================
                         if (debug) {
                                 fprintf(stderr, "[D-CHOFER: aparcar] PID=%d -> Coche %d: msg_tipo = %li (aparcarr), msg_subtipo = %li\n", getpid(), msg.hCoche, msg.tipo, msg.subtipo);
@@ -683,6 +691,10 @@ void bucle_chofer(){
 
                         // esperar a que sea el turno de este coche
                         sem_esperar_turno(IDX_SEM_ORDEN(alg_aux), PARKING_getNUmero(msg.hCoche));
+
+                        // avisar que este chofer esta activo
+                        op = (struct sembuf){IDX_SEM_CHOFERES_ACTIVOS, +1, 0};
+                        semop(id_sem, &op, 1);
 
                         //==========================
                         if (debug) {
@@ -697,12 +709,21 @@ void bucle_chofer(){
                                 permiso_avance,
                                 permiso_avance_commit
                         );
+
+                        // avisar que este chofer esta terminó
+                        op = (struct sembuf){IDX_SEM_CHOFERES_ACTIVOS, -1, 0};
+                        semop(id_sem, &op, 1);
                 } else if (msg.subtipo == PARKING_MSGSUB_DESAPARCAR) {
+                        struct sembuf op;
                         //==========================
                         if (debug){
                                 fprintf(stderr, "[D-CHOFER: desaparcar] PID=%d -> Coche %d: msg_tipo = %li (desaparcar), msg_subtipo = %li\n", getpid(), msg.hCoche, msg.tipo, msg.subtipo);
                         }//fin if
                         //==========================
+
+                        // avisar que este chofer esta activo
+                        op = (struct sembuf){IDX_SEM_CHOFERES_ACTIVOS, +1, 0};
+                        semop(id_sem, &op, 1);
 
                         PARKING_desaparcar(
                                 msg.hCoche,
@@ -710,6 +731,10 @@ void bucle_chofer(){
                                 permiso_avance,
                                 permiso_avance_commit
                         );
+
+                        // avisar que este chofer esta terminó
+                        op = (struct sembuf){IDX_SEM_CHOFERES_ACTIVOS, -1, 0};
+                        semop(id_sem, &op, 1);
                 }//fin else if
         }//fin while
 }//fin funcion bucle_chofer
@@ -745,11 +770,10 @@ void finalizar_simulacion(){
                 id_buzon = -1;
         }//fin if
 
-        if (id_sem != -1) {
-                semctl(id_sem, 0, IPC_RMID);
-                id_sem = -1;
-        }//fin if
-        
+        // el padre espera a que todos los choferes activos salgan de PARKING_aparcar/desaparcar
+        struct sembuf op = {IDX_SEM_CHOFERES_ACTIVOS, 0, 0};
+        semop(id_sem, &op, 1);
+
         // esperar a que todos los hijos terminen antes de que el padre muera
         int status;
         pid_t pid_muerto;
