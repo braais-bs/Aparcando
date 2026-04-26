@@ -205,4 +205,71 @@ Y se introdujeron cambios en esta parte del código, para que el chofer llamase 
 ```
 ]
 
+= De cara a la primera convocatoria
+== 1. RECURSOS IPC USADOS, VALORES INICIALES Y SIGNIFICADO
+
+=== Buzón de Mensajes (`id_buzon`)
+    - Uso: Comunicación entre la Biblioteca, el Gestor y los Chóferes.
+    - Mensajes tipo 100: Peticiones originales enviadas por la biblioteca.
+    - Mensajes tipo 1 (Alta) y tipo 2 (Baja): Peticiones renumeradas por el Gestor según la política (PA, PD o FIFO) para que el SO las ordene automáticamente.
+
+=== Memoria Compartida (`id_mem`)
+    - `acera[4][80]` y `carril[4][80]`: Matrices para guardar la ocupación física del parking por cada algoritmo.
+    - `proxAparcar[4]`: Vector para guardar el puntero circular necesario en el algoritmo de Siguiente Ajuste.
+
+=== Semáforos (`id_sem`)
+    - *`SEM_MUTEX` (Valor inicial = 1):* Garantiza la exclusión mutua estricta al leer o escribir en la Memoria Compartida (`acera`, `carril`, `proxAparcar`).
+    - *`SEM_ORDEN[4]` (Valor inicial = 1 para cada uno):* Array de 4 semáforos. Garantiza que no haya dos chóferes calculando huecos para el mismo algoritmo a la vez, evitando que se asigne el mismo sitio a dos coches distintos.
+    - *`SEM_AVANCE[4]` (Valor inicial = 0):* Array de 4 semáforos usado en las funciones de `permiso_avance` para sincronizar los pasos de la simulación gráfica de la biblioteca.
+
+== 2. PSEUDOCÓDIGO DE SINCRONIZACIÓN
+
+*Nota:* Se asume que la Biblioteca internamente hace un `Send(Buzon, msg, tipo=100)` cuando llega un coche nuevo o agota su tiempo.
+#block(
+  stroke: 1pt + gray,
+  fill: luma(96%),
+  inset: 10pt,
+  radius: 6pt,
+  width: 100%,
+)[
+  #set align(center)
+  #scale(x: 80%, y: 80%, reflow: true)[
+    ```text
+       PROCESO GESTOR                                PROCESO CHÓFER
+      ================                              ================
+    Por_siempre_jamás                             Por_siempre_jamás
+    {                                             {
+       // Lee SOLO peticiones de la biblioteca       // Pide tipo -2: El SO le da primero los 
+       Receive(Buzon, msg, tipo=100)                 // de tipo 1 y luego los de tipo 2
+                                                     Receive(Buzon, msg, tipo=-2)
+       // Renumera según política (PA/PD/FIFO)
+       Si (cumple_prioridad)                         alg = obtener_algoritmo(msg.coche)
+           msg.tipo = 1 // Alta prioridad
+       Sino                                          // Evita que dos chóferes del mismo 
+           msg.tipo = 2 // Baja prioridad            // algoritmo actúen a la vez
+                                                     Wait(SEM_ORDEN[alg])
+       // Reenvía a la cola para los chóferes
+       Send(Buzon, msg)                              // Protege la memoria compartida
+    }                                                Wait(SEM_MUTEX)
+
+                                                     Si (msg.subtipo == APARCAR) {
+                                                         pos = buscar_hueco(alg)
+                                                         escribir_acera_shm(pos)
+                                                     } Sino {
+                                                         borrar_acera_shm(pos)
+                                                     }
+
+                                                     // Libera la memoria compartida
+                                                     Signal(SEM_MUTEX)
+
+                                                     // Llama a la biblioteca para animar
+                                                     Ejecutar_Operacion_Biblioteca()
+
+                                                     // Libera el turno de su algoritmo
+                                                     Signal(SEM_ORDEN[alg])
+                                                  }
+    ```
+  ]
+]
+
 //>End of the paper
