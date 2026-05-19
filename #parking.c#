@@ -829,13 +829,13 @@ void finalizar_simulacion(){
         struct sembuf op = {IDX_SEM_CHOFERES_ACTIVOS, 0, 0};
         semop(id_sem, &op, 1);
 
-        // esperar a que todos los hijos terminen antes de que el padre muera
-        int status;
-        pid_t pid_muerto;
-        // esto luego seria mas sencillo pero para el mensaje de debug es necesario
-        while ((pid_muerto = wait(&status)) > 0) {
-                if (debug) fprintf(stderr, "[D-PADRE] Hijo PID=%d recogido, exit=%d\n", pid_muerto, WEXITSTATUS(status));
-        }//fin while
+//        // esperar a que todos los hijos terminen antes de que el padre muera
+//        int status;
+//        pid_t pid_muerto;
+//        // esto luego seria mas sencillo pero para el mensaje de debug es necesario
+//        while ((pid_muerto = wait(&status)) > 0) {
+//                if (debug) fprintf(stderr, "[D-PADRE] Hijo PID=%d recogido, exit=%d\n", pid_muerto, WEXITSTATUS(status));
+//        }//fin while
 
         if (debug) fprintf(stderr, "[D-PADRE] PID=%d muriendo\n", getpid());
 }//fin funcion finalizar_simulacion
