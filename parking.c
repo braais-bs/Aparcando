@@ -40,10 +40,11 @@ typedef struct {
         int carril[NUM_ALGORITMOS][TAM_PARKING];
         int proxAparcar[NUM_ALGORITMOS];
         int pidChofers[NUM_CHOFERES];
+        int terminar;
 } MEM_PROPIA;
 
 // variables globales
-int retardo, num_choferes, debug, prio_PA, prio_PD, pos_cont_choferes = 0; //pos_cont_choferes-> es una variable que se encarga de guardar la posicion dentro del array en memoria compartida para guardar la posicion en la que se inserta este nuevo PID de proceso chofer
+int retardo, num_choferes, debug, prio_PA, prio_PD, pos_cont_choferes = 0, terminacion_anormal = 0;; //pos_cont_choferes-> es una variable que se encarga de guardar la posicion dentro del array en memoria compartida para guardar la posicion en la que se inserta este nuevo PID de proceso chofer
 int id_mem = -1, id_sem = -1, id_buzon = -1;  // -1 indica que aun no se crearon
 int nSem, tam;
 
@@ -90,7 +91,7 @@ int main(int argc, char *argv[]);
 void proceso_gestor() {
         struct PARKING_mensajeBiblioteca msg;
 
-        while (1) {
+        while (!mp->terminar) {
                 //lee SOLO los mensajes originales de la biblioteca (PARKING_MSG = 100)
                 if (msgrcv(id_buzon, &msg, sizeof(msg) - sizeof(long), PARKING_MSG, 0) == -1) {
                         if (errno == EINTR) continue; //si es una sennal, reintenta
@@ -142,18 +143,11 @@ void manejar_ctrlc(int signal) {
         if (debug) fprintf(stderr, "[D-SIG] Señal %d recibida\n", signal);
         //=======================
 
+        mp->terminar = 1;
+        terminacion_anormal = 1;
         PARKING_fin(0);
-
-        // hace falta matar al avisador para que no espere 30s
-        if (flag_avisador > 0) {
-                kill(flag_avisador, SIGTERM);
-        }
-
         finalizar_simulacion();  // wait de los hijos
-        limpiar();
-        system("tput cup 27 0");
-        system("tput cnorm");
-        exit(0); // sale del programa
+        exit(0);
 }//fin funcion manejar_ctrlc
 
 void manejar_alarma(int sig) {
@@ -714,12 +708,12 @@ void bucle_chofer(){
         struct PARKING_mensajeBiblioteca msg;
         int alg_aux;
 
-        while (1) {
+        while (!mp->terminar) {
                 // -> MAGIA DE UNIX: Al pedir el tipo -2, el SO nos da primero los mensajes
                 // de tipo 1 (alta prioridad), y si no hay, los de tipo 2 (baja prioridad).
                 if (msgrcv(id_buzon, &msg, sizeof(msg) - sizeof(long), -2, 0) == -1) {
                         break; // Si se borra la cola, el chófer muere limpiamente
-                }//fin if
+                }//fin
 
                 if (debug) fprintf(stderr, "[D-CHOFER] tipo=%ld subtipo=%ld coche=%d\n", msg.tipo, msg.subtipo, msg.hCoche);
 
@@ -819,15 +813,38 @@ void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[]){
 }//fin funcion inicializar_simulacion
 
 void finalizar_simulacion(){
-        // permitimos a los hijos salir de buzones y semaforos si estaban bloqueados esperando
+        // matamos al avisador para que no espere 30s (puede que ya no existe si terminó al pasar los 30s)
+        if (flag_avisador > 0) {
+                if (kill(flag_avisador, SIGKILL) == -1 && errno != ESRCH) {
+                        if (debug) fprintf(stderr, "[D-FINALIZAR] kill avisador falló, probablemente porque ya terminó: %s\n", strerror(errno));
+                }
+                flag_avisador = -1; // para que no se vuelva a intentar borrar
+        }//fin if
+
+        // solo esperamos en terminación normal
+        if (terminacion_anormal == 1) {
+                struct sembuf op = {IDX_SEM_CHOFERES_ACTIVOS, 0, 0};
+                semop(id_sem, &op, 1);
+        }
+
+        // permitimos a los hijos salir de buzones si estaban bloqueados esperando
         if (id_buzon != -1) {
                 msgctl(id_buzon, IPC_RMID, NULL);
                 id_buzon = -1;
-        }//fin if
+        }
 
-        // el padre espera a que todos los choferes activos salgan de PARKING_aparcar/desaparcar
-        struct sembuf op = {IDX_SEM_CHOFERES_ACTIVOS, 0, 0};
-        semop(id_sem, &op, 1);
+        // matamos al gestor
+        if (flag_gestor > 0) {
+                kill(flag_gestor, SIGKILL);
+                flag_gestor = -1;
+        }
+
+        // matamos a todos los choferes
+        for (int i = 0; i < pos_cont_choferes; i++) {
+                if (mp->pidChofers[i] > 0) {
+                        kill(mp->pidChofers[i], SIGKILL);
+                } //fin for
+        }// fin if
 
         // esperar a que todos los hijos terminen antes de que el padre muera
         int status;
@@ -837,7 +854,13 @@ void finalizar_simulacion(){
                 if (debug) fprintf(stderr, "[D-PADRE] Hijo PID=%d recogido, exit=%d\n", pid_muerto, WEXITSTATUS(status));
         }//fin while
 
-        if (debug) fprintf(stderr, "[D-PADRE] PID=%d muriendo\n", getpid());
+        // solo esperamos en terminación normal
+        if (terminacion_anormal == 1) {
+                if (debug) fprintf(stderr, "[D-PADRE] PID=%d muriendo\n", getpid());
+        
+                system("tput cup 26 0");
+                system("tput cnorm"); //esto lo que hace es volver a poner el cursor "normal", ya que cuando se ejecuta el programa a veces el cursor se queda en modo "escondido" esto lo que hace es cambiarle a modo mostar
+        } // fin if
 }//fin funcion finalizar_simulacion
 
 void parking(){
@@ -891,6 +914,9 @@ int main(int argc, char *argv[]) {
 
         //limpieza de los recursos utilizados
         limpiar();
+
+        if (debug) fprintf(stderr, "[D-PADRE] PID=%d muriendo\n", getpid());
+        
         system("tput cup 27 0");
         system("tput cnorm"); //esto lo que hace es volver a poner el cursor "normal", ya que cuando se ejecuta el programa a veces el cursor se queda en modo "escondido" esto lo que hace es cambiarle a modo mostar
 
