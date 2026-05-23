@@ -842,7 +842,7 @@ void finalizar_simulacion(){
         // matamos a todos los choferes
         for (int i = 0; i < pos_cont_choferes; i++) {
                 if (mp->pidChofers[i] > 0) {
-                        kill(mp->pidChofers[i], SIGKILL);
+                        kill(mp->pidChofers[i], SIGKILL); //aqui es donde el proceso padre mata a los hijos
                 } //fin for
         }// fin if
 
@@ -854,10 +854,12 @@ void finalizar_simulacion(){
                 if (debug) fprintf(stderr, "[D-PADRE] Hijo PID=%d recogido, exit=%d\n", pid_muerto, WEXITSTATUS(status));
         }//fin while
 
+        limpiar();
+
         // solo esperamos en terminación normal
         if (terminacion_anormal == 1) {
                 if (debug) fprintf(stderr, "[D-PADRE] PID=%d muriendo\n", getpid());
-        
+
                 system("tput cup 26 0");
                 system("tput cnorm"); //esto lo que hace es volver a poner el cursor "normal", ya que cuando se ejecuta el programa a veces el cursor se queda en modo "escondido" esto lo que hace es cambiarle a modo mostar
         } // fin if
