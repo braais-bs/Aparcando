@@ -1,0 +1,3 @@
+LIBRARY parking2
+EXPORTS
+    PARKING2_inicio
