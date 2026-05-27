@@ -10,9 +10,37 @@
 #include "parking2.h"
 
 // variables globales
-int retardo, num_choferes, debug, prio_PA, prio_PD;
+int retardo, debug;
+
+// manejador de la DLL
+HMODULE hDLL = NULL;
+
+// ESTO NO SE SI ES ASI TAL CUAL O ALGUNO SOBRARA/FALTARA
+// punteros a funciones de la DLL (los pille del .h y del enunciado de la practica)
+int  (*PARKING2_inicio)            (TIPO_FUNCION_LLEGADA*, TIPO_FUNCION_SALIDA*, long, int) = NULL;
+int  (*PARKING2_fin)               (void) = NULL;
+int  (*PARKING2_aparcar)           (HCoche, void*, TIPO_FUNCION_APARCAR_COMMIT,
+    TIPO_FUNCION_PERMISO_AVANCE,
+    TIPO_FUNCION_PERMISO_AVANCE_COMMIT) = NULL;
+int  (*PARKING2_desaparcar)        (HCoche, void*,
+    TIPO_FUNCION_PERMISO_AVANCE,
+    TIPO_FUNCION_PERMISO_AVANCE_COMMIT) = NULL;
+int  (*PARKING2_getNUmero)         (HCoche) = NULL;
+int  (*PARKING2_getLongitud)       (HCoche) = NULL;
+int  (*PARKING2_getPosiciOnEnAcera)(HCoche) = NULL;
+unsigned long (*PARKING2_getTServ) (HCoche) = NULL;
+int  (*PARKING2_getColor)          (HCoche) = NULL;
+void* (*PARKING2_getDatos)          (HCoche) = NULL;
+int  (*PARKING2_getX)              (HCoche) = NULL;
+int  (*PARKING2_getY)              (HCoche) = NULL;
+int  (*PARKING2_getX2)             (HCoche) = NULL;
+int  (*PARKING2_getY2)             (HCoche) = NULL;
+int  (*PARKING2_getAlgoritmo)      (HCoche) = NULL;
+int  (*PARKING2_isAceraOcupada)    (int, int) = NULL;
 
 // declaracion de los prototipos de las funciones
+void cargar_dll();
+void eliminar_dll();
 void validar_argumentos(int argc, char *argv[]);
 void ayudaPrograma(char *argv[]);
 BOOL WINAPI CtrlHandler (DWORD CtrlType);
@@ -21,8 +49,93 @@ void inicializar_simulacion();
 void parking();
 int main (int argc, char *argv[]);
 
-void validar_argumentos(int argc, char *argv[]){
-        if (argc < 3 || argc > 5) {
+
+void cargar_dll() {
+    // cargamos la DLL dinámicamente. Devuelve un manejador que es hDLL 
+    hDLL = LoadLibrary("parking2.dll");
+
+    // en caso de que falle el manejador valdrá NULL, por tanto mostramos el err9r
+    if (hDLL == NULL) {
+        fprintf(stderr, "ERROR[DLL]: No se pudo cargar parking2.dll (error %lu)\n", GetLastError());
+        exit(1); // sin DLL no podemos seguir, por tanto salimos
+    }//fin if
+
+    if (debug)
+        fprintf(stderr, "[DLL] parking2.dll cargada correctamente\n");
+
+    // buscamos dentro las funciones del dll y creamos un puntero a cada una
+    // Ade´más cambiamos el tipo de cada puntero para que coincida con el de la función
+
+    // PARA ENTENDER MEJOR, SERIA ALGO ASÍ CON TODAS:
+
+    // puntero a la funcion de la DLL = (tipo que devuelve la funcion (* que indica que es un puntero) (tipo de los parámetros de la función))
+    PARKING2_inicio = (int (*)(TIPO_FUNCION_LLEGADA*, TIPO_FUNCION_SALIDA*, long, int))
+		// busca la funcion dentro del DLL (que es hDLL) y obtine la direccion y busca la función PARKING2_inicio
+            GetProcAddress(hDLL, "PARKING2_inicio");
+
+    // estas serían igual que la anterior
+    PARKING2_fin = (int (*)(void))
+            GetProcAddress(hDLL, "PARKING2_fin");
+    PARKING2_aparcar = (int (*)(HCoche, void*, TIPO_FUNCION_APARCAR_COMMIT, TIPO_FUNCION_PERMISO_AVANCE, TIPO_FUNCION_PERMISO_AVANCE_COMMIT))
+            GetProcAddress(hDLL, "PARKING2_aparcar");
+    PARKING2_desaparcar = (int (*)(HCoche, void*, TIPO_FUNCION_PERMISO_AVANCE, TIPO_FUNCION_PERMISO_AVANCE_COMMIT))
+            GetProcAddress(hDLL, "PARKING2_desaparcar");
+    PARKING2_getNUmero = (int (*)(HCoche)) 
+            GetProcAddress(hDLL, "PARKING2_getNUmero");
+    PARKING2_getLongitud = (int (*)(HCoche)) 
+            GetProcAddress(hDLL, "PARKING2_getLongitud");
+    PARKING2_getPosiciOnEnAcera = (int (*)(HCoche)) 
+            GetProcAddress(hDLL, "PARKING2_getPosiciOnEnAcera");
+    PARKING2_getTServ = (unsigned long (*)(HCoche)) 
+            GetProcAddress(hDLL, "PARKING2_getTServ");
+    PARKING2_getColor = (int (*)(HCoche)) 
+            GetProcAddress(hDLL, "PARKING2_getColor");
+    PARKING2_getDatos = (void* (*)(HCoche)) 
+            GetProcAddress(hDLL, "PARKING2_getDatos");
+    PARKING2_getX = (int (*)(HCoche)) 
+            GetProcAddress(hDLL, "PARKING2_getX");
+    PARKING2_getY = (int (*)(HCoche))
+            GetProcAddress(hDLL, "PARKING2_getY");
+    PARKING2_getX2 = (int (*)(HCoche))
+            GetProcAddress(hDLL, "PARKING2_getX2");
+    PARKING2_getY2 = (int (*)(HCoche))
+            GetProcAddress(hDLL, "PARKING2_getY2");
+    PARKING2_getAlgoritmo = (int (*)(HCoche))
+            GetProcAddress(hDLL, "PARKING2_getAlgoritmo");
+    PARKING2_isAceraOcupada = (int (*)(int, int)) 
+            GetProcAddress(hDLL, "PARKING2_isAceraOcupada");
+
+    // verificamos todas las funciones y si cualquiera falló eliminamos la DLL y saldriamos también del programa
+    if (!PARKING2_inicio || !PARKING2_fin ||
+        !PARKING2_aparcar || !PARKING2_desaparcar ||
+        !PARKING2_getNUmero || !PARKING2_getLongitud ||
+        !PARKING2_getPosiciOnEnAcera ||!PARKING2_getTServ || 
+        !PARKING2_getColor || !PARKING2_getDatos || 
+        !PARKING2_getX || !PARKING2_getY || 
+        !PARKING2_getX2 || !PARKING2_getY2 || 
+        !PARKING2_getAlgoritmo || !PARKING2_isAceraOcupada) {
+        fprintf(stderr, "ERROR[DLL]: No se encontro una funcion en la DLL (error %lu)\n", GetLastError());
+        eliminar_dll();
+        exit(1);
+
+    if (debug)
+        fprintf(stderr, "[DLL] Todas las funciones fueron resueltas correctamente\n");
+}//fin funcion cargar_dll
+
+
+void eliminar_dll() {
+    // si aun está cargado el DLL
+    if (hDLL != NULL) {
+        FreeLibrary(hDLL); // se elimina
+        hDLL = NULL;
+        if (debug) {
+            fprintf(stderr, "[DLL] DLL elimiada correctamente\n");
+        }// fin if
+    }//fin if
+}//fin funcion descargar_dll
+
+void validar_argumentos(int argc, char* argv[]) {
+        if (argc < 2 || argc > 3) {
                 fprintf(stderr, "Error: numero de argumentos incorrecto\n");
                 ayudaPrograma(argv);
                 exit(1);
@@ -34,48 +147,26 @@ void validar_argumentos(int argc, char *argv[]){
                 exit(1);
         }//fin if
 
-        num_choferes = atoi(argv[2]);
-        if (num_choferes <= 0){
-                fprintf(stderr, "Error: el numero de choferes debe ser > 0\n");
-                exit(1);
-        }//fin if
+        // argumento opcional de debug
+        debug = 0;
 
-        // argumentos opcionales
-        debug = 0; prio_PA = 0; prio_PD = 0;
-
-        for (int i = 3; i < argc; i++) {
-                if (strcmp(argv[i], "D") == 0) {
+        if (argc == 3) {
+                if (strcmp(argv[2], "D") == 0) {
                         debug = 1;
                 }//fin if
-                else if (strcmp(argv[i], "PA") == 0) {
-                        prio_PA = 1;
-                }//fin else if
-                else if (strcmp(argv[i], "PD") == 0) {
-                        prio_PD = 1;
-                }//fin else if
-                else {
-                        fprintf(stderr, "Error: argumento desconocido '%s'\n", argv[i]);
-                        exit(1);
-                }//fin else
-        }//fin for
-
-        if (prio_PA && prio_PD) {
-                fprintf(stderr, "Error: PA y PD no pueden usarse a la vez\n");
+        else {
+                fprintf(stderr, "Error: argumento desconocido '%s'\n", argv[2]);
                 exit(1);
-        }//fin if
+        }//fin else
+    }//fin if
 }//fin funcion validar_argumentos
 
-void ayudaPrograma(char *argv[]){
-        printf("=====AYUDA PROGRAMA [%s]=====\n",argv[0]);
+void ayudaPrograma(char* argv[]) {
+        printf("=====AYUDA PROGRAMA [%s]=====\n", argv[0]);
         printf("Ejemplo uso:\n");
-        printf("\t%s [numero de retardo] [numero de choferes] [tipo de politica / debug]\n", argv[0]);
+        printf("\t%s [numero de retardo] [debug]\n", argv[0]);
         printf("\t  - [numero de retardo]-> Tiene que ser mayor o igual a 0, no hay limites con la velocidad, cuanto mas bajo sea el numero mas lento se ejecutara.\n");
-        printf("\t  - [numero de choferes]-> Tiene que ser mayor o igual a 0, no hay limites con la cantidad de procesos chofer.\n");
-        printf("\t  - [tipo de politica]-> Hay tres tipos de politica:.\n");
-        printf("\t\t + FIFO: Si no se introduce argumento de politica es el que se ejecutara.\n");
-        printf("\t\t + PA: Prioridad al Aparcar, se manejaran los mensajes de tal forma que los coches den prioridad a aparcar.\n");
-        printf("\t\t + PD: Prioridad al Desaparcar, se manejaran los mensajes de tal forma que los coches den prioridad a desaparcar.\n");
-        printf("\t  - [debug]-> Se puede obtener por la salida de errores los mensajes de depuracion del programa durante la ejecucion, este argumento puede ser el 3ro o 4to al invocar el programa.\n");
+        printf("\t  - [debug]-> Se puede obtener por la salida de errores los mensajes de depuracion del programa durante la ejecucion, este argumento es opcional y debe ser la letra D.\n");
 }//fin funcion ayudaPrograma
 
 /*
@@ -134,8 +225,8 @@ BOOL WINAPI CtrlHandler (DWORD CtrlType){
 
 //void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[]){
 void inicializar_simulacion(){
-        TIPO_FUNCION_LLEGADA funcionLlegada[1];
-        TIPO_FUNCION_SALIDA funcionSalida[1];
+        TIPO_FUNCION_LLEGADA funcionLlegada[4];
+        TIPO_FUNCION_SALIDA funcionSalida[4];
         long intervalo = 0.0;
         bool d = 0;
 
@@ -164,32 +255,37 @@ int main (int argc, char *argv[]) {
         if (debug){
                 fprintf(stderr,"[DBG-Variable-Debug]Estado variable debug = %d\n",debug);
                 fprintf(stderr,"NUM_VELOCIDAD: %d\n",retardo);
-                fprintf(stderr,"NUM_CHOFERES: %d\n",num_choferes);
         }//fin if
 
         //Parte manejo sennal Control C
         BOOL added;
 
-        added = SetConsoleCtrlHandler ((PHANDLER_ROUTINE) CtrlHandler,
-                                        TRUE);
+        added = SetConsoleCtrlHandler ((PHANDLER_ROUTINE) CtrlHandler, TRUE);
         if (added) {
-                if(debug){
-                        fprintf (stderr,"\n[Start Of ControlC Handler Output]");
-                        fprintf (stderr,"\nThe Control Handler is installed.\n");
-                        fprintf (stderr,"\n -- Now try pressing Ctrl+C or Ctrl+Break, or");
-                        fprintf (stderr,"\n    try logging off or closing the console...\n");
-                        fprintf (stderr,"\n(...waiting in a loop for events...)\n");
-                        fprintf (stderr,"[End Of ControlC Handler Output]\n");
-        /*
-                        while (1) {
-                                Sleep (500);
-                        }//fin while
-        */
-                }//fin if
-                else fprintf (stderr,"\nERROR[CtrlC]: Could not set controlC handler");
+            if (debug) {
+                    fprintf(stderr, "\n[Inicio de la salida manejador Control+C]\n");
+                    fprintf(stderr, "El manejador de Control+C esta instalado.\n");
+                    fprintf(stderr, "\n -- Ahora prueba a pulsar Ctrl+C o Ctrl+Break, o");
+                    fprintf(stderr, "\n    intenta cerrar la consola...\n");
+                    fprintf(stderr, "\n(...esperando eventos...)\n");
+                    fprintf(stderr, "[Fin salida manejador Control+C]\n");
+                /*
+                                while (1) {
+                                        Sleep (500);
+                                }//fin while
+                */
+            }//fin if
+        } else {
+                fprintf(stderr, "\nERROR[CtrlC]: No se pudo instalar el manejador de Control+C\n");
         }//fin if
+
+        // cargamos dinamicamente el dll
+        cargar_dll();
+
         parking();
 
+        // eliminamos el dll antes de terminar
+        eliminar_dll();
 
         return 0;
 }//fin funcion main
