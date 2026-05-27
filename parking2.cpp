@@ -66,7 +66,7 @@ void cargar_dll() {
 
     // puntero a la funcion de la DLL = (tipo que devuelve la funcion (* que indica que es un puntero) (tipo de los parámetros de la función))
     PARKING2_inicio = (int (*)(TIPO_FUNCION_LLEGADA*, TIPO_FUNCION_SALIDA*, long, int))
-		// busca la funcion dentro del DLL (que es hDLL) y obtine la direccion y busca la función PARKING2_inicio
+		    // busca la funcion dentro del DLL (que es hDLL) y obtine la direccion. Para ello busca por el nombre PARKING2_inicio
             GetProcAddress(hDLL, "PARKING2_inicio");
 
     // estas serían igual que la anterior
