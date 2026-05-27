@@ -182,6 +182,7 @@ BOOL WINAPI CtrlHandler (DWORD CtrlType){
                 case CTRL_C_EVENT:
                 printf ("Ctrl-C event\n\n");
                 Beep (750, 300);
+				eliminar_dll(); 
                 res= TRUE;
                 break;
 
@@ -189,6 +190,7 @@ BOOL WINAPI CtrlHandler (DWORD CtrlType){
                 case CTRL_CLOSE_EVENT:
                 printf ("Ctrl-Close event\n\n");
                 Beep (600, 200);
+				eliminar_dll(); 
                 res= TRUE;
                 break;
 
