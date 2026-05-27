@@ -113,6 +113,7 @@ void cargar_dll() {
         fprintf(stderr, "ERROR[DLL]: No se encontro una funcion en la DLL (error %lu)\n", GetLastError());
         eliminar_dll();
         exit(1);
+	}//fin if
 
     if (debug)
         fprintf(stderr, "[DLL] Todas las funciones fueron resueltas correctamente\n");
