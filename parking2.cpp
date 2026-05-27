@@ -15,28 +15,24 @@ int retardo, debug;
 // manejador de la DLL
 HMODULE hDLL = NULL;
 
-// ESTO NO SE SI ES ASI TAL CUAL O ALGUNO SOBRARA/FALTARA
+// no se si me comería alguno, si eso vamos metiendo sobre la marcha si se usa alguno que no aparece
 // punteros a funciones de la DLL (los pille del .h y del enunciado de la practica)
-int  (*PARKING2_inicio)            (TIPO_FUNCION_LLEGADA*, TIPO_FUNCION_SALIDA*, long, int) = NULL;
-int  (*PARKING2_fin)               (void) = NULL;
-int  (*PARKING2_aparcar)           (HCoche, void*, TIPO_FUNCION_APARCAR_COMMIT,
-    TIPO_FUNCION_PERMISO_AVANCE,
-    TIPO_FUNCION_PERMISO_AVANCE_COMMIT) = NULL;
-int  (*PARKING2_desaparcar)        (HCoche, void*,
-    TIPO_FUNCION_PERMISO_AVANCE,
-    TIPO_FUNCION_PERMISO_AVANCE_COMMIT) = NULL;
-int  (*PARKING2_getNUmero)         (HCoche) = NULL;
-int  (*PARKING2_getLongitud)       (HCoche) = NULL;
-int  (*PARKING2_getPosiciOnEnAcera)(HCoche) = NULL;
+int (*PARKING2_inicio) (TIPO_FUNCION_LLEGADA*, TIPO_FUNCION_SALIDA*, long, int) = NULL;
+int (*PARKING2_fin) (void) = NULL;
+int (*PARKING2_aparcar) (HCoche, void*, TIPO_FUNCION_APARCAR_COMMIT, TIPO_FUNCION_PERMISO_AVANCE, TIPO_FUNCION_PERMISO_AVANCE_COMMIT) = NULL;
+int (*PARKING2_desaparcar) (HCoche, void*, TIPO_FUNCION_PERMISO_AVANCE, TIPO_FUNCION_PERMISO_AVANCE_COMMIT) = NULL;
+int (*PARKING2_getNUmero) (HCoche) = NULL;
+int (*PARKING2_getLongitud) (HCoche) = NULL;
+int (*PARKING2_getPosiciOnEnAcera) (HCoche) = NULL;
 unsigned long (*PARKING2_getTServ) (HCoche) = NULL;
-int  (*PARKING2_getColor)          (HCoche) = NULL;
-void* (*PARKING2_getDatos)          (HCoche) = NULL;
-int  (*PARKING2_getX)              (HCoche) = NULL;
-int  (*PARKING2_getY)              (HCoche) = NULL;
-int  (*PARKING2_getX2)             (HCoche) = NULL;
-int  (*PARKING2_getY2)             (HCoche) = NULL;
-int  (*PARKING2_getAlgoritmo)      (HCoche) = NULL;
-int  (*PARKING2_isAceraOcupada)    (int, int) = NULL;
+int (*PARKING2_getColor) (HCoche) = NULL;
+void* (*PARKING2_getDatos) (HCoche) = NULL;
+int (*PARKING2_getX) (HCoche) = NULL;
+int (*PARKING2_getY) (HCoche) = NULL;
+int (*PARKING2_getX2) (HCoche) = NULL;
+int (*PARKING2_getY2) (HCoche) = NULL;
+int (*PARKING2_getAlgoritmo) (HCoche) = NULL;
+int (*PARKING2_isAceraOcupada) (int, int) = NULL;
 
 // declaracion de los prototipos de las funciones
 void cargar_dll();
