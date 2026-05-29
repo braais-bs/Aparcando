@@ -20,19 +20,20 @@ int retardo, debug;
 int acera[NUM_ALGORITMOS][TAM_PARKING];
 int carril[NUM_ALGORITMOS][TAM_PARKING];
 int proxAparcar[NUM_ALGORITMOS];
-int proxAparcarNum[NUM_ALGORITMOS]; // esto permite saber el numero de coche que sera el siguiente en aparcar.
-                                   // antes teniamos un semaforo que hacia numcoches + 1, parece ser que en windows no se puede. De todas maneras dejo esto y luego vamos mirando
+int proxAparcarNum[NUM_ALGORITMOS]; // permite saber el numero de coche que sera el siguiente en aparcar.
 
-// sincronizacion para cada algoritmo. Les pongo h al principio, no es obligatorio pero en win32 es convencion de que son manejadores (HANDLE)
-HANDLE hMutex[NUM_ALGORITMOS]; // un acceso a la vez a los arrays de cada algoritmo
-HANDLE hOrden[NUM_ALGORITMOS]; // para controlar el orden de aparcamiento
+// sincronizacion para cada algoritmo.
+HANDLE hMutex[NUM_ALGORITMOS];  // un acceso a la vez a los arrays de cada algoritmo
+HANDLE hOrden[NUM_ALGORITMOS];  // para controlar el orden de aparcamiento
 HANDLE hAvance[NUM_ALGORITMOS]; // para controlar que solo un coche avance a la vez
 
 // manejador de la DLL
 HMODULE hDLL = NULL;
 
-// no se si me comería alguno, si eso vamos metiendo sobre la marcha si se usa alguno que no aparece
-// punteros a funciones de la DLL (los pille del .h y del enunciado de la practica)
+// manejador para terminr la simulacion al 
+HANDLE hEventoFin = NULL;
+
+// punteros a funciones de la DLL
 int (*PARKING2_inicio) (TIPO_FUNCION_LLEGADA*, TIPO_FUNCION_SALIDA*, long, int) = NULL;
 int (*PARKING2_fin) (void) = NULL;
 int (*PARKING2_aparcar) (HCoche, void*, TIPO_FUNCION_APARCAR_COMMIT, TIPO_FUNCION_PERMISO_AVANCE, TIPO_FUNCION_PERMISO_AVANCE_COMMIT) = NULL;
@@ -57,319 +58,612 @@ void validar_argumentos(int argc, char* argv[]);
 void ayudaPrograma(char* argv[]);
 BOOL WINAPI CtrlHandler(DWORD CtrlType);
 void inicializar_sincronizacion();
-void eliminar_sincronizacion();
-//void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[]);
-void inicializar_simulacion();
+void liberar_sincronizacion();
 void parking();
 int main(int argc, char* argv[]);
 
+// Prototipos de funciones de asignación de memoria (adaptados de Linux)
+int primer_ajuste(HCoche hc);
+int siguiente_ajuste(HCoche hc);
+int mejor_ajuste(HCoche hc);
+int peor_ajuste(HCoche hc);
+
+// Prototipos de las manejadoras Callback registradas en la biblioteca
+int llegada_primer_ajuste(HCoche hc);
+int llegada_siguiente_ajuste(HCoche hc);
+int llegada_mejor_ajuste(HCoche hc);
+int llegada_peor_ajuste(HCoche hc);
+
+int salida_primer_ajuste(HCoche hc);
+int salida_siguiente_ajuste(HCoche hc);
+int salida_mejor_ajuste(HCoche hc);
+int salida_peor_ajuste(HCoche hc);
+
+// Funciones secundarias de sincronización y commit
+void aparcar_commit(HCoche hc);
+void permiso_avance(HCoche hc);
+void permiso_avance_commit(HCoche hc);
+int ocupar_carril_desaparcar(int alg, int X2, int longitud);
+void vaciar_pos_acera(int pos, int longitud, int alg);
+
+// Funciones que ejecutarán los hilos creados de forma dinámica
+DWORD WINAPI hilo_aparcar(LPVOID lpParam);
+DWORD WINAPI hilo_desaparcar(LPVOID lpParam);
+
 
 void cargar_dll() {
-    // cargamos la DLL dinámicamente. Devuelve un manejador que es hDLL 
     hDLL = LoadLibrary("parking2.dll");
-
-    // en caso de que falle el manejador valdrá NULL, por tanto mostramos el err9r
     if (hDLL == NULL) {
         fprintf(stderr, "ERROR[DLL]: No se pudo cargar parking2.dll (error %lu)\n", GetLastError());
-        exit(1); // sin DLL no podemos seguir, por tanto salimos
-    }//fin if
+        exit(1);
+    }
 
-    if (debug)
-        fprintf(stderr, "[DLL] parking2.dll cargada correctamente\n");
+    if (debug) fprintf(stderr, "[DLL] parking2.dll cargada correctamente\n");
 
-    // buscamos dentro las funciones del dll y creamos un puntero a cada una
-    // Ade´más cambiamos el tipo de cada puntero para que coincida con el de la función
+    PARKING2_inicio = (int (*)(TIPO_FUNCION_LLEGADA*, TIPO_FUNCION_SALIDA*, long, int)) GetProcAddress(hDLL, "PARKING2_inicio");
+    PARKING2_fin = (int (*)(void)) GetProcAddress(hDLL, "PARKING2_fin");
+    PARKING2_aparcar = (int (*)(HCoche, void*, TIPO_FUNCION_APARCAR_COMMIT, TIPO_FUNCION_PERMISO_AVANCE, TIPO_FUNCION_PERMISO_AVANCE_COMMIT)) GetProcAddress(hDLL, "PARKING2_aparcar");
+    PARKING2_desaparcar = (int (*)(HCoche, void*, TIPO_FUNCION_PERMISO_AVANCE, TIPO_FUNCION_PERMISO_AVANCE_COMMIT)) GetProcAddress(hDLL, "PARKING2_desaparcar");
+    PARKING2_getNUmero = (int (*)(HCoche)) GetProcAddress(hDLL, "PARKING2_getNUmero");
+    PARKING2_getLongitud = (int (*)(HCoche)) GetProcAddress(hDLL, "PARKING2_getLongitud");
+    PARKING2_getPosiciOnEnAcera = (int (*)(HCoche)) GetProcAddress(hDLL, "PARKING2_getPosiciOnEnAcera");
+    PARKING2_getTServ = (unsigned long (*)(HCoche)) GetProcAddress(hDLL, "PARKING2_getTServ");
+    PARKING2_getColor = (int (*)(HCoche)) GetProcAddress(hDLL, "PARKING2_getColor");
+    PARKING2_getDatos = (void* (*)(HCoche)) GetProcAddress(hDLL, "PARKING2_getDatos");
+    PARKING2_getX = (int (*)(HCoche)) GetProcAddress(hDLL, "PARKING2_getX");
+    PARKING2_getY = (int (*)(HCoche)) GetProcAddress(hDLL, "PARKING2_getY");
+    PARKING2_getX2 = (int (*)(HCoche)) GetProcAddress(hDLL, "PARKING2_getX2");
+    PARKING2_getY2 = (int (*)(HCoche)) GetProcAddress(hDLL, "PARKING2_getY2");
+    PARKING2_getAlgoritmo = (int (*)(HCoche)) GetProcAddress(hDLL, "PARKING2_getAlgoritmo");
+    PARKING2_isAceraOcupada = (int (*)(int, int)) GetProcAddress(hDLL, "PARKING2_isAceraOcupada");
 
-    // PARA ENTENDER MEJOR, SERIA ALGO ASÍ CON TODAS:
-
-    // puntero a la funcion de la DLL = (tipo que devuelve la funcion (* que indica que es un puntero) (tipo de los parámetros de la función))
-    PARKING2_inicio = (int (*)(TIPO_FUNCION_LLEGADA*, TIPO_FUNCION_SALIDA*, long, int))
-        // busca la funcion dentro del DLL (que es hDLL) y obtine la direccion y busca la función PARKING2_inicio
-        GetProcAddress(hDLL, "PARKING2_inicio");
-
-    // estas serían igual que la anterior
-    PARKING2_fin = (int (*)(void))
-        GetProcAddress(hDLL, "PARKING2_fin");
-    PARKING2_aparcar = (int (*)(HCoche, void*, TIPO_FUNCION_APARCAR_COMMIT, TIPO_FUNCION_PERMISO_AVANCE, TIPO_FUNCION_PERMISO_AVANCE_COMMIT))
-        GetProcAddress(hDLL, "PARKING2_aparcar");
-    PARKING2_desaparcar = (int (*)(HCoche, void*, TIPO_FUNCION_PERMISO_AVANCE, TIPO_FUNCION_PERMISO_AVANCE_COMMIT))
-        GetProcAddress(hDLL, "PARKING2_desaparcar");
-    PARKING2_getNUmero = (int (*)(HCoche))
-        GetProcAddress(hDLL, "PARKING2_getNUmero");
-    PARKING2_getLongitud = (int (*)(HCoche))
-        GetProcAddress(hDLL, "PARKING2_getLongitud");
-    PARKING2_getPosiciOnEnAcera = (int (*)(HCoche))
-        GetProcAddress(hDLL, "PARKING2_getPosiciOnEnAcera");
-    PARKING2_getTServ = (unsigned long (*)(HCoche))
-        GetProcAddress(hDLL, "PARKING2_getTServ");
-    PARKING2_getColor = (int (*)(HCoche))
-        GetProcAddress(hDLL, "PARKING2_getColor");
-    PARKING2_getDatos = (void* (*)(HCoche))
-        GetProcAddress(hDLL, "PARKING2_getDatos");
-    PARKING2_getX = (int (*)(HCoche))
-        GetProcAddress(hDLL, "PARKING2_getX");
-    PARKING2_getY = (int (*)(HCoche))
-        GetProcAddress(hDLL, "PARKING2_getY");
-    PARKING2_getX2 = (int (*)(HCoche))
-        GetProcAddress(hDLL, "PARKING2_getX2");
-    PARKING2_getY2 = (int (*)(HCoche))
-        GetProcAddress(hDLL, "PARKING2_getY2");
-    PARKING2_getAlgoritmo = (int (*)(HCoche))
-        GetProcAddress(hDLL, "PARKING2_getAlgoritmo");
-    PARKING2_isAceraOcupada = (int (*)(int, int))
-        GetProcAddress(hDLL, "PARKING2_isAceraOcupada");
-
-    // verificamos todas las funciones y si cualquiera falló eliminamos la DLL y saldriamos también del programa
-    if (!PARKING2_inicio || !PARKING2_fin ||
-        !PARKING2_aparcar || !PARKING2_desaparcar ||
-        !PARKING2_getNUmero || !PARKING2_getLongitud ||
-        !PARKING2_getPosiciOnEnAcera || !PARKING2_getTServ ||
-        !PARKING2_getColor || !PARKING2_getDatos ||
-        !PARKING2_getX || !PARKING2_getY ||
-        !PARKING2_getX2 || !PARKING2_getY2 ||
-        !PARKING2_getAlgoritmo || !PARKING2_isAceraOcupada) {
+    if (!PARKING2_inicio || !PARKING2_fin || !PARKING2_aparcar || !PARKING2_desaparcar ||
+        !PARKING2_getNUmero || !PARKING2_getLongitud || !PARKING2_getPosiciOnEnAcera || !PARKING2_getTServ ||
+        !PARKING2_getColor || !PARKING2_getDatos || !PARKING2_getX || !PARKING2_getY ||
+        !PARKING2_getX2 || !PARKING2_getY2 || !PARKING2_getAlgoritmo || !PARKING2_isAceraOcupada) {
         fprintf(stderr, "ERROR[DLL]: No se encontro una funcion en la DLL (error %lu)\n", GetLastError());
         eliminar_dll();
         exit(1);
-	}//fin if
+    }
 
-        if (debug)
-            fprintf(stderr, "[DLL] Todas las funciones fueron resueltas correctamente\n");
-}//fin funcion cargar_dll
-
+    if (debug) fprintf(stderr, "[DLL] Todas las funciones fueron resueltas correctamente\n");
+}
 
 void eliminar_dll() {
-        // si aun está cargado el DLL
-        if (hDLL != NULL) {
-                FreeLibrary(hDLL); // se elimina
-                hDLL = NULL;
-                if (debug) {
-                        fprintf(stderr, "[DLL] DLL elimiada correctamente\n");
-                }// fin if
-        }//fin if
-}//fin funcion descargar_dll
+    if (hDLL != NULL) {
+        FreeLibrary(hDLL);
+        hDLL = NULL;
+        if (debug) fprintf(stderr, "[DLL] DLL eliminada correctamente\n");
+    }
+}
 
-    void validar_argumentos(int argc, char* argv[]) {
-        if (argc < 2 || argc > 3) {
-            fprintf(stderr, "Error: numero de argumentos incorrecto\n");
-            ayudaPrograma(argv);
-            exit(1);
-        }//fin if
+void validar_argumentos(int argc, char* argv[]) {
+    if (argc < 2 || argc > 3) {
+        fprintf(stderr, "Error: numero de argumentos incorrecto\n");
+        ayudaPrograma(argv);
+        exit(1);
+    }
 
-        retardo = atoi(argv[1]);
-        if (retardo < 0) {
-            fprintf(stderr, "Error: el retardo debe ser >= 0\n");
-            exit(1);
-        }//fin if
+    retardo = atoi(argv[1]);
+    if (retardo < 0) {
+        fprintf(stderr, "Error: el retardo debe ser >= 0\n");
+        exit(1);
+    }
 
-        // argumento opcional de debug
-        debug = 0;
-
-        if (argc == 3) {
-            if (strcmp(argv[2], "D") == 0) {
-                debug = 1;
-            }//fin if
-            else {
-                fprintf(stderr, "Error: argumento desconocido '%s'\n", argv[2]);
-                exit(1);
-            }//fin else
-        }//fin if
-    }//fin funcion validar_argumentos
-
-    void ayudaPrograma(char* argv[]) {
-        printf("=====AYUDA PROGRAMA [%s]=====\n", argv[0]);
-        printf("Ejemplo uso:\n");
-        printf("\t%s [numero de retardo] [debug]\n", argv[0]);
-        printf("\t  - [numero de retardo]-> Tiene que ser mayor o igual a 0, no hay limites con la velocidad, cuanto mas bajo sea el numero mas lento se ejecutara.\n");
-        printf("\t  - [debug]-> Se puede obtener por la salida de errores los mensajes de depuracion del programa durante la ejecucion, este argumento es opcional y debe ser la letra D.\n");
-    }//fin funcion ayudaPrograma
-
-    /*
-      Función de manejo de los avisos de cierre o terminación.
-
-      https://docs.microsoft.com/es-es/windows/console/handlerroutine
-
-      Si la función controla la señal de control, debe devolver true.
-      Si devuelve false, se usa la función de controlador siguiente en la
-      lista de controladores para este proceso.
-    */
-    BOOL WINAPI CtrlHandler(DWORD CtrlType) {
-        BOOL res = TRUE;
-        switch (CtrlType) {
-
-            // Handle the CTRL-C signal.
-        case CTRL_C_EVENT:
-            printf("Ctrl-C event\n\n");
-            Beep(750, 300);
-            eliminar_dll();
-            res = TRUE;
-            break;
-
-            // CTRL-CLOSE: confirm that the user wants to exit.
-        case CTRL_CLOSE_EVENT:
-            printf("Ctrl-Close event\n\n");
-            Beep(600, 200);
-            res = TRUE;
-            eliminar_dll();
-            break;
-
-            // Pass other signals to the next handler.
-        case CTRL_BREAK_EVENT:
-            printf("Ctrl-Break event\n\n");
-            Beep(900, 200);
-            res = FALSE;
-            break;
-
-        case CTRL_LOGOFF_EVENT:
-            printf("Ctrl-Logoff event\n\n");
-            Beep(1000, 200);
-            res = FALSE;
-            break;
-
-        case CTRL_SHUTDOWN_EVENT:
-            printf("Ctrl-Shutdown event\n\n");
-            Beep(750, 500);
-            res = FALSE;
-            break;
-
-        default:
-            res = FALSE;
-            break;
-        }//fin switch
-
-        return res;
-    }//fin funcion CtrlHandler
-
-void inicializar_sincronizacion() {
-        for (int i = 0; i < NUM_ALGORITMOS; i++) {
-                // manejador del mutex = CreateMutex(
-                //     NULL --> cualquier proceso puede operar sin restricciones sobre el semáforo
-                //     FALSE --> hace que el mutex al principio quede libre y no lo tome ningun proceso hasta que empieze lasimulacion, y el primero al que le toque lo tomará
-                //     NULL --> puedes darle un nombre para que los procesos accedan por el nombre, pero no es necesario)
-                hMutex[i] = CreateMutex(NULL, FALSE, NULL);
-                // si el manejador es NULL es porque hubo un fallo al crear el mutex
-                if (hMutex[i] == NULL) {
-                        fprintf(stderr, "ERROR[SYNC]: No se pudo crear hMutex[%d] (error %lu)\n", i, GetLastError());
-                        exit(1);
-                }//fin if
-  
-				// manejador del semaforo de orden = CreateSemaphore(
-				//    NULL --> cualquier proceso puede operar sin restricciones sobre el semáforo
-				//    1 --> el semáforo empieza con un recurso disponible, los recursos miden el numero de coches que pueden acceder
-				//    1 --> número máximo de recursos que pueden llegar a estar disponibles. El semaforo de orden solo deja pasar al coche que le toca, por tanto 1
-				//    NULL --> puedes darle un nombre para que los procesos accedan por el nombre, pero no es necesario)
-                hOrden[i] = CreateSemaphore(NULL, 1, 1, NULL);
-                if (hOrden[i] == NULL) {
-                        fprintf(stderr, "ERROR[SYNC]: No se pudo crear hOrden[%d] (error %lu)\n", i, GetLastError());
-                        exit(1);
-                }//fin if
-
-                // manejador del semaforo de avance = CreateSemaphore(
-                //    NULL --> cualquier proceso puede operar sin restricciones sobre el semáforo
-                //    0 --> el semáforo empieza con 0 recursos disponibles, esto permite que si un coche no ouede avanzar se duerma aqui
-                //    999 --> número máximo de recursos que pueden llegar a estar disponibles. Puede ser que haya varios coches que quieran avanzar pero se tuvieran que dormir, asi que permitimos un numero a lto para evitar problemas
-                //    NULL --> puedes darle un nombre para que los procesos accedan por el nombre, pero no es necesario)
-                hAvance[i] = CreateSemaphore(NULL, 0, 999, NULL);
-                hAvance[i] = CreateSemaphore(NULL, 0, 999, NULL);
-                if (hAvance[i] == NULL) {
-                        fprintf(stderr, "ERROR[SYNC]: No se pudo crear hAvance[%d] (error %lu)\n", i, GetLastError());
-                        exit(1);
-                }//fin if
-
-                // el primer coche en aparcar en cada algoritmo es el numero 1
-                // equivale a: mp->proxAparcar[i] = 1 en Linux
-                proxAparcarNum[i] = 1;
-
-                // siguiente_ajuste empieza a buscar desde la posicion 0
-                proxAparcar[i] = 0;
-        }//fin for
-
-
-        // inicializamos las arrays de acera y carril a 0 (todo libre)
-        memset(acera, 0, sizeof(acera));
-        memset(carril, 0, sizeof(carril));
-
-        if (debug)
-                fprintf(stderr, "[SYNC] Objetos de sincronizacion inicializados correctamente\n");
-}//fin funcion inicializar_sincronizacion
-
-void liberar_sincronizacion() {
-        for (int a = 0; a < NUM_ALGORITMOS; a++) {
-                // CloseHandle cierra el maanejador y lo libera
-                if (hMutex[a])  CloseHandle(hMutex[a]);
-                if (hOrden[a])  CloseHandle(hOrden[a]);
-                if (hAvance[a]) CloseHandle(hAvance[a]);
-        }//fin for
-
-        if (debug)
-                fprintf(stderr, "[SYNC] Objetos de sincronizacion liberados correctamente\n");
-}//fin funcion liberar_sincronizacion
-
-    //void inicializar_simulacion(TIPO_FUNCION_LLEGADA funciones[]){
-    void inicializar_simulacion() {
-        TIPO_FUNCION_LLEGADA funcionLlegada[4];
-        TIPO_FUNCION_SALIDA funcionSalida[4];
-        long intervalo = 0.0;
-        bool d = 0;
-
-        int resultado = PARKING2_inicio(funcionLlegada, funcionSalida, intervalo, d);
-    }//fin funcion inicializar_simulacion
-
-
-    void parking() {
-        // array de 4 funciones, una por algoritmo (PRIMER, SIGUIENTE, MEJOR, PEOR)
-//        TIPO_FUNCION_LLEGADA funciones[4] = {
-//                primer_ajuste,
-//                siguiente_ajuste,
-//                mejor_ajuste,
-//                peor_ajuste
-//        };
-
-        // iniciar la simulacion con los valores leidos de los argumentos
-//        inicializar_simulacion(funciones);
-        inicializar_simulacion();
-
-        //        finalizar_simulacion();
-    }//fin funcion parking
-
-    int main(int argc, char* argv[]) {
-        //Parte validador de argumentos (tiene que estar aqui porque si no la variable debug no se cambia)
-        validar_argumentos(argc, argv);
-        if (debug) {
-            fprintf(stderr, "[DBG-Variable-Debug]Estado variable debug = %d\n", debug);
-            fprintf(stderr, "NUM_VELOCIDAD: %d\n", retardo);
-        }//fin if
-
-        //Parte manejo sennal Control C
-        BOOL added;
-
-        added = SetConsoleCtrlHandler((PHANDLER_ROUTINE)CtrlHandler, TRUE);
-        if (added) {
-            if (debug) {
-                fprintf(stderr, "\n[Inicio de la salida manejador Control+C]\n");
-                fprintf(stderr, "El manejador de Control+C esta instalado.\n");
-                fprintf(stderr, "\n -- Ahora prueba a pulsar Ctrl+C o Ctrl+Break, o");
-                fprintf(stderr, "\n    intenta cerrar la consola...\n");
-                fprintf(stderr, "\n(...esperando eventos...)\n");
-                fprintf(stderr, "[Fin salida manejador Control+C]\n");
-                /*
-                                while (1) {
-                                        Sleep (500);
-                                }//fin while
-                */
-            }//fin if
+    debug = 0;
+    if (argc == 3) {
+        if (strcmp(argv[2], "D") == 0) {
+            debug = 1;
         }
         else {
-            fprintf(stderr, "\nERROR[CtrlC]: No se pudo instalar el manejador de Control+C\n");
-        }//fin if
+            fprintf(stderr, "Error: argumento desconocido '%s'\n", argv[2]);
+            exit(1);
+        }
+    }
+}
 
-        // cargamos dinamicamente el dll
-        cargar_dll();
+void ayudaPrograma(char* argv[]) {
+    printf("=====AYUDA PROGRAMA [%s]=====\n", argv[0]);
+    printf("Ejemplo uso:\n");
+    printf("\t%s [numero de retardo] [debug]\n", argv[0]);
+    printf("\t  - [numero de retardo]-> Tiene que ser mayor o igual a 0.\n");
+    printf("\t  - [debug]-> Opcional, debe ser la letra D.\n");
+}
 
-        parking();
+BOOL WINAPI CtrlHandler(DWORD CtrlType) {
+    BOOL res = TRUE;
+    switch (CtrlType) {
+    case CTRL_C_EVENT:
+    case CTRL_CLOSE_EVENT:
+        if (debug) fprintf(stderr, "Evento de finalizacion recibido.\n");
+        if (hEventoFin) SetEvent(hEventoFin); // solo avisa, no limpia
+        return TRUE;
+    default:
+        return FALSE;
+    }
+}
 
-        // eliminamos el dll antes de terminar
-        eliminar_dll();
+void inicializar_sincronizacion() {
+    for (int i = 0; i < NUM_ALGORITMOS; i++) {
+        hMutex[i] = CreateMutex(NULL, FALSE, NULL);
+        if (hMutex[i] == NULL) {
+            fprintf(stderr, "ERROR[SYNC]: No se pudo crear hMutex[%d] (error %lu)\n", i, GetLastError());
+            exit(1);
+        }
 
+        hOrden[i] = CreateSemaphore(NULL, 1, 1, NULL);
+        if (hOrden[i] == NULL) {
+            fprintf(stderr, "ERROR[SYNC]: No se pudo crear hOrden[%d] (error %lu)\n", i, GetLastError());
+            exit(1);
+        }
+
+        hAvance[i] = CreateSemaphore(NULL, 0, 999, NULL);
+        if (hAvance[i] == NULL) {
+            fprintf(stderr, "ERROR[SYNC]: No se pudo crear hAvance[%d] (error %lu)\n", i, GetLastError());
+            exit(1);
+        }
+
+        proxAparcarNum[i] = 1;
+        proxAparcar[i] = 0;
+    }
+
+    memset(acera, 0, sizeof(acera));
+    memset(carril, 0, sizeof(carril));
+
+    if (debug) fprintf(stderr, "[SYNC] Objetos de sincronizacion inicializados correctamente\n");
+}
+
+void liberar_sincronizacion() {
+    for (int a = 0; a < NUM_ALGORITMOS; a++) {
+        if (hMutex[a])  CloseHandle(hMutex[a]);
+        if (hOrden[a])  CloseHandle(hOrden[a]);
+        if (hAvance[a]) CloseHandle(hAvance[a]);
+    }
+    if (debug) fprintf(stderr, "[SYNC] Objetos de sincronizacion liberados correctamente\n");
+}
+
+// ==================== FUNCIONES DE HILOS DILIGENTES ====================
+
+DWORD WINAPI hilo_aparcar(LPVOID lpParam) {
+    HCoche hc = (HCoche)(INT_PTR)lpParam;
+    int alg = PARKING2_getAlgoritmo(hc);
+
+    // NOTA XIV: Control de orden secuencial estricto en el hilo hijo
+    while (1) {
+        WaitForSingleObject(hOrden[alg], INFINITE);
+
+        WaitForSingleObject(hMutex[alg], INFINITE);
+        int mi_turno = (PARKING2_getNUmero(hc) == proxAparcarNum[alg]);
+        ReleaseMutex(hMutex[alg]);
+
+        if (mi_turno) {
+            // Es su turno: conserva el semáforo hOrden para bloquear a coches posteriores y entra
+            break;
+        }
+        else {
+            // No es su turno: libera temporalmente el semáforo y espera un poco
+            ReleaseSemaphore(hOrden[alg], 1, NULL);
+            Sleep(5);
+        }
+    }
+
+    // Llama a la DLL para ejecutar la animación del aparcado físico
+    PARKING2_aparcar(hc, NULL, aparcar_commit, permiso_avance, permiso_avance_commit);
+    return 0;
+}
+
+DWORD WINAPI hilo_desaparcar(LPVOID lpParam) {
+    HCoche hc = (HCoche)(INT_PTR)lpParam;
+    // No requiere control de orden secuencial para iniciar la maniobra
+    PARKING2_desaparcar(hc, NULL, permiso_avance, permiso_avance_commit);
+    return 0;
+}
+
+// ==================== MANEJADORAS CALLBACKS (LLEGADA Y SALIDA) ====================
+
+int llegada_primer_ajuste(HCoche hc) {
+    int pos = -1;
+    WaitForSingleObject(hMutex[PRIMER_AJUSTE], INFINITE);
+    pos = primer_ajuste(hc);
+    ReleaseMutex(hMutex[PRIMER_AJUSTE]);
+
+    if (pos >= 0) {
+        HANDLE hThread = CreateThread(NULL, 0, hilo_aparcar, (LPVOID)(INT_PTR)hc, 0, NULL);
+        if (hThread) CloseHandle(hThread); // NOTA XIII: cerrar manejador al momento
+    }
+    return pos;
+}
+
+int llegada_siguiente_ajuste(HCoche hc) {
+    int pos = -1;
+    WaitForSingleObject(hMutex[SIGUIENTE_AJUSTE], INFINITE);
+    pos = siguiente_ajuste(hc);
+    ReleaseMutex(hMutex[SIGUIENTE_AJUSTE]);
+
+    if (pos >= 0) {
+        HANDLE hThread = CreateThread(NULL, 0, hilo_aparcar, (LPVOID)(INT_PTR)hc, 0, NULL);
+        if (hThread) CloseHandle(hThread);
+    }
+    return pos;
+}
+
+int llegada_mejor_ajuste(HCoche hc) {
+    int pos = -1;
+    WaitForSingleObject(hMutex[MEJOR_AJUSTE], INFINITE);
+    pos = mejor_ajuste(hc);
+    ReleaseMutex(hMutex[MEJOR_AJUSTE]);
+
+    if (pos >= 0) {
+        HANDLE hThread = CreateThread(NULL, 0, hilo_aparcar, (LPVOID)(INT_PTR)hc, 0, NULL);
+        if (hThread) CloseHandle(hThread);
+    }
+    return pos;
+}
+
+int llegada_peor_ajuste(HCoche hc) {
+    int pos = -1;
+    WaitForSingleObject(hMutex[PEOR_AJUSTE], INFINITE);
+    pos = peor_ajuste(hc);
+    ReleaseMutex(hMutex[PEOR_AJUSTE]);
+
+    if (pos >= 0) {
+        HANDLE hThread = CreateThread(NULL, 0, hilo_aparcar, (LPVOID)(INT_PTR)hc, 0, NULL);
+        if (hThread) CloseHandle(hThread);
+    }
+    return pos;
+}
+
+int salida_primer_ajuste(HCoche hc) {
+    HANDLE hThread = CreateThread(NULL, 0, hilo_desaparcar, (LPVOID)(INT_PTR)hc, 0, NULL);
+    if (hThread) {
+        CloseHandle(hThread);
         return 0;
-    }//fin funcion main
+    }
+    return -1;
+}
+
+int salida_siguiente_ajuste(HCoche hc) {
+    HANDLE hThread = CreateThread(NULL, 0, hilo_desaparcar, (LPVOID)(INT_PTR)hc, 0, NULL);
+    if (hThread) {
+        CloseHandle(hThread);
+        return 0;
+    }
+    return -1;
+}
+
+int salida_mejor_ajuste(HCoche hc) {
+    HANDLE hThread = CreateThread(NULL, 0, hilo_desaparcar, (LPVOID)(INT_PTR)hc, 0, NULL);
+    if (hThread) {
+        CloseHandle(hThread);
+        return 0;
+    }
+    return -1;
+}
+
+int salida_peor_ajuste(HCoche hc) {
+    HANDLE hThread = CreateThread(NULL, 0, hilo_desaparcar, (LPVOID)(INT_PTR)hc, 0, NULL);
+    if (hThread) {
+        CloseHandle(hThread);
+        return 0;
+    }
+    return -1;
+}
+
+// ==================== ALGORITMOS DE ASIGNACIÓN ====================
+
+int primer_ajuste(HCoche hc) {
+    int longitud = PARKING2_getLongitud(hc);
+    int huecoLibre = 0;
+    int pos = -1;
+
+    if (debug) fprintf(stderr, "[D-ALG:primer_ajuste] Coche %d - longitud=%d - buscando hueco\n", PARKING2_getNUmero(hc), longitud);
+
+    for (int i = 0; i < TAM_PARKING; ) {
+        if (acera[PRIMER_AJUSTE][i] == 0) {
+            huecoLibre++;
+            if (huecoLibre >= longitud) {
+                pos = i - longitud + 1;
+                break;
+            }
+            i++;
+        }
+        else {
+			i += acera[PRIMER_AJUSTE][i]; // Optimización para saltar todos los espacios ocupados
+            huecoLibre = 0;
+        }
+    }
+
+    if (pos >= 0) {
+        for (int i = pos; i < pos + longitud; i++) {
+            acera[PRIMER_AJUSTE][i] = longitud;
+        }
+    }
+    return pos;
+}
+
+int siguiente_ajuste(HCoche hc) {
+    int longitud = PARKING2_getLongitud(hc);
+    int huecoLibre = 0;
+    int pos = -1;
+
+    int inicio = proxAparcar[SIGUIENTE_AJUSTE];
+    if (acera[SIGUIENTE_AJUSTE][inicio] == 0) {
+        while (inicio > 0 && acera[SIGUIENTE_AJUSTE][inicio - 1] == 0) {
+            inicio--;
+        }
+    }
+
+    for (int i = inicio; i < TAM_PARKING; ) {
+        if (acera[SIGUIENTE_AJUSTE][i] == 0) {
+            huecoLibre++;
+            if (huecoLibre >= longitud) {
+                pos = i - longitud + 1;
+                break;
+            }
+            i++;
+        }
+        else {
+            i += acera[SIGUIENTE_AJUSTE][i];
+            huecoLibre = 0;
+        }
+    }
+
+    if (pos == -1) {
+        huecoLibre = 0;
+        for (int i = 0; i < inicio; ) {
+            if (acera[SIGUIENTE_AJUSTE][i] == 0) {
+                huecoLibre++;
+                if (huecoLibre >= longitud) {
+                    pos = i - longitud + 1;
+                    break;
+                }
+                i++;
+            }
+            else {
+                i += acera[SIGUIENTE_AJUSTE][i];
+                huecoLibre = 0;
+            }
+        }
+    }
+
+    if (pos >= 0) {
+        for (int i = pos; i < pos + longitud; i++) {
+            acera[SIGUIENTE_AJUSTE][i] = longitud;
+        }
+        proxAparcar[SIGUIENTE_AJUSTE] = (pos + longitud) % TAM_PARKING;
+    }
+    return pos;
+}
+
+int mejor_ajuste(HCoche hc) {
+    int longitud = PARKING2_getLongitud(hc);
+    int pos = -1;
+    int huecoActual = 0;
+    int inicioHuecoActual = -1;
+    int mejorTamano = TAM_PARKING + 1;
+
+    for (int i = 0; i < TAM_PARKING; i++) {
+        if (acera[MEJOR_AJUSTE][i] == 0) {
+            if (huecoActual == 0) inicioHuecoActual = i;
+            huecoActual++;
+        }
+        else {
+            if (huecoActual >= longitud && huecoActual < mejorTamano) {
+                mejorTamano = huecoActual;
+                pos = inicioHuecoActual;
+            }
+            huecoActual = 0;
+        }
+    }
+    if (huecoActual >= longitud && huecoActual < mejorTamano) {
+        pos = inicioHuecoActual;
+    }
+
+    if (pos >= 0) {
+        for (int i = pos; i < pos + longitud; i++) acera[MEJOR_AJUSTE][i] = longitud;
+    }
+    return pos;
+}
+
+int peor_ajuste(HCoche hc) {
+    int longitud = PARKING2_getLongitud(hc);
+    int pos = -1;
+    int huecoActual = 0;
+    int inicioHuecoActual = -1;
+    int peorTamano = -1;
+
+    for (int i = 0; i < TAM_PARKING; i++) {
+        if (acera[PEOR_AJUSTE][i] == 0) {
+            if (huecoActual == 0) inicioHuecoActual = i;
+            huecoActual++;
+        }
+        else {
+            if (huecoActual >= longitud && huecoActual > peorTamano) {
+                peorTamano = huecoActual;
+                pos = inicioHuecoActual;
+            }
+            huecoActual = 0;
+        }
+    }
+    if (huecoActual >= longitud && huecoActual > peorTamano) {
+        pos = inicioHuecoActual;
+    }
+
+    if (pos >= 0) {
+        for (int i = pos; i < pos + longitud; i++) acera[PEOR_AJUSTE][i] = longitud;
+    }
+    return pos;
+}
+
+// ==================== CALLBACKS DE AVANCE Y COMMIT ====================
+
+void aparcar_commit(HCoche hc) {
+    int alg = PARKING2_getAlgoritmo(hc);
+
+    WaitForSingleObject(hMutex[alg], INFINITE);
+    proxAparcarNum[alg]++; // Incrementa el secuencial de turnos
+    ReleaseMutex(hMutex[alg]);
+
+    if (debug) fprintf(stderr, "[D-PKG:aparcar_commit] Coche %d aparcado. Siguiente esperado: %d\n", PARKING2_getNUmero(hc), proxAparcarNum[alg]);
+
+    // Da paso al siguiente hilo retenido en cola secuencial
+    ReleaseSemaphore(hOrden[alg], 1, NULL);
+}
+
+void permiso_avance(HCoche hc) {
+    int X1 = PARKING2_getX(hc);
+    int Y1 = PARKING2_getY(hc);
+    int X2 = PARKING2_getX2(hc);
+    int Y2 = PARKING2_getY2(hc);
+    int alg = PARKING2_getAlgoritmo(hc);
+    int longitud = PARKING2_getLongitud(hc);
+
+    // Avance regular por el propio carril
+    if (Y1 == 2 && Y2 == 2 && X2 >= 0 && X2 < TAM_PARKING) {
+        while (1) {
+            WaitForSingleObject(hMutex[alg], INFINITE);
+            if (carril[alg][X2] == 0) {
+                carril[alg][X2] = 1;
+                ReleaseMutex(hMutex[alg]);
+                break;
+            }
+            ReleaseMutex(hMutex[alg]);
+            WaitForSingleObject(hAvance[alg], INFINITE); // Bloqueo si está la carretera ocupada
+        }
+    }
+    // Salida desde la acera a la carretera (Desaparcar)
+    if (Y1 < Y2 && Y2 == 2 && X2 >= 0 && X2 + longitud - 1 < TAM_PARKING) {
+        while (1) {
+            WaitForSingleObject(hMutex[alg], INFINITE);
+            if (ocupar_carril_desaparcar(alg, X2, longitud)) {
+                ReleaseMutex(hMutex[alg]);
+                break;
+            }
+            ReleaseMutex(hMutex[alg]);
+            WaitForSingleObject(hAvance[alg], INFINITE);
+        }
+    }
+}
+
+void permiso_avance_commit(HCoche hc) {
+    int X_anterior = PARKING2_getX2(hc);
+    int Y_anterior = PARKING2_getY2(hc);
+    int Y_actual = PARKING2_getY(hc);
+    int alg = PARKING2_getAlgoritmo(hc);
+    int longitud = PARKING2_getLongitud(hc);
+
+    // El coche se movió de la acera al carril (libera el hueco físico de la acera)
+    if (Y_anterior == 1 && Y_actual == 2) {
+        WaitForSingleObject(hMutex[alg], INFINITE);
+        vaciar_pos_acera(PARKING2_getPosiciOnEnAcera(hc), longitud, alg);
+        ReleaseMutex(hMutex[alg]);
+    }
+
+    // El coche se introduce en la acera para estacionar (libera el carril que usaba)
+    if (Y_anterior == 2 && Y_actual == 1 && X_anterior >= 0 && X_anterior + longitud - 1 < TAM_PARKING) {
+        WaitForSingleObject(hMutex[alg], INFINITE);
+        for (int i = X_anterior; i < X_anterior + longitud; i++) {
+            carril[alg][i] = 0;
+        }
+        ReleaseMutex(hMutex[alg]);
+        ReleaseSemaphore(hAvance[alg], 1, NULL); // Avisa a los hilos en espera en el carril
+    }
+
+    // El coche avanzó una celda hacia adelante dentro de la calzada
+    if (Y_anterior == 2 && Y_actual == 2 && X_anterior < TAM_PARKING) {
+        int final_coche = X_anterior + longitud - 1;
+        if (final_coche >= 0 && final_coche < TAM_PARKING) {
+            WaitForSingleObject(hMutex[alg], INFINITE);
+            carril[alg][final_coche] = 0; // vacía la cola trasera
+            ReleaseMutex(hMutex[alg]);
+            ReleaseSemaphore(hAvance[alg], 1, NULL);
+        }
+    }
+}
+
+int ocupar_carril_desaparcar(int alg, int X2, int longitud) {
+    for (int i = X2; i < X2 + longitud; i++) {
+        if (carril[alg][i] != 0) return 0;
+    }
+    for (int i = X2; i < X2 + longitud; i++) {
+        carril[alg][i] = 1;
+    }
+    return 1;
+}
+
+void vaciar_pos_acera(int pos, int longitud, int alg) {
+    if (pos >= 0) {
+        for (int i = pos; i < pos + longitud; i++) {
+            acera[alg][i] = 0;
+        }
+    }
+}
+
+// ==================== INICIALIZACIÓN Y PROGRAMA PRINCIPAL ====================
+
+void parking() {
+    TIPO_FUNCION_LLEGADA funcionesLlegada[4] = {
+        llegada_primer_ajuste,
+        llegada_siguiente_ajuste,
+        llegada_mejor_ajuste,
+        llegada_peor_ajuste
+    };
+    TIPO_FUNCION_SALIDA funcionesSalida[4] = {
+        salida_primer_ajuste,
+        salida_siguiente_ajuste,
+        salida_mejor_ajuste,
+        salida_peor_ajuste
+    };
+
+    // crea el evento de fin antes de iniciar la simulacion
+    hEventoFin = CreateEvent(NULL, TRUE, FALSE, NULL);
+    if (hEventoFin == NULL) {
+        fprintf(stderr, "ERROR: No se pudo crear hEventoFin\n");
+        return;
+    }
+
+    inicializar_sincronizacion();
+
+    // invoca la ejecución concurrente de la biblioteca. Bloqueará hasta finalizar el escenario
+    int resultado = PARKING2_inicio(funcionesLlegada, funcionesSalida, retardo, debug);
+
+    if (debug) fprintf(stderr, "[SIMULACION] PARKING2_inicio retorno con codigo: %d\n", resultado);
+
+    if (resultado == -1) {
+        fprintf(stderr, "ERROR: PARKING2_inicio fallo\n");
+        liberar_sincronizacion();
+        return;
+    }
+    
+    // duerme 30s o si no hasta que se reciba la señal ctrl c (hEventoFin)
+    DWORD motivo = WaitForSingleObject(hEventoFin, 30000);
+
+    if (motivo == WAIT_TIMEOUT) {
+        PARKING2_fin();        // 30s: ordenado, espera a la DLL
+        liberar_sincronizacion();
+    }
+    else {
+        liberar_sincronizacion(); // Ctrl+C: inmediato, sin esperar a la DLL
+    }
+
+    CloseHandle(hEventoFin);
+    hEventoFin = NULL;
+}
+
+
+int main(int argc, char* argv[]) {
+    validar_argumentos(argc, argv);
+    if (debug) {
+        fprintf(stderr, "[DBG-Variable-Debug] Estado variable debug = %d\n", debug);
+        fprintf(stderr, "NUM_VELOCIDAD: %d\n", retardo);
+    }
+
+    // Instalación del capturador de interrupción Control+C nativo de consola Windows
+    SetConsoleCtrlHandler((PHANDLER_ROUTINE)CtrlHandler, TRUE);
+
+    cargar_dll();
+    parking();
+    eliminar_dll();
+
+    return 0;
+}
