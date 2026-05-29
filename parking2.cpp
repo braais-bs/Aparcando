@@ -519,10 +519,10 @@ void permiso_avance(HCoche hc) {
                 while (1) {
                         WaitForSingleObject(hMutex[alg], INFINITE);
                         if (carril[alg][X2] == 0) {
-                        carril[alg][X2] = 1;
-                        ReleaseMutex(hMutex[alg]);
-                        break;
-                        }
+                                carril[alg][X2] = 1;
+                                ReleaseMutex(hMutex[alg]);
+                                break;
+                        }//fin if
                         ReleaseMutex(hMutex[alg]);
                         WaitForSingleObject(hAvance[alg], INFINITE); // Bloqueo si está la carretera ocupada
                 }//fin while
@@ -627,7 +627,7 @@ void parking() {
                 fprintf(stderr, "ERROR: PARKING2_inicio fallo\n");
                 liberar_sincronizacion();
                 return;
-        }
+        }//fin if
 
         //duerme 30s o si no hasta que se reciba la señal ctrl c (hEventoFin)
         DWORD motivo = WaitForSingleObject(hEventoFin, 30000);
@@ -650,7 +650,7 @@ int main(int argc, char* argv[]) {
         if (debug) {
                 fprintf(stderr, "[DBG-Variable-Debug] Estado variable debug = %d\n", debug);
                 fprintf(stderr, "NUM_VELOCIDAD: %d\n", retardo);
-        }
+        }//fin if
 
         //instalacion del capturador de interrupcion Control+C nativo de consola windows
         SetConsoleCtrlHandler((PHANDLER_ROUTINE)CtrlHandler, TRUE);
