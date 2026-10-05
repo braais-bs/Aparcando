@@ -1,4 +1,0 @@
-[ ] Manejador de señal de Control-C limpiar la funcion, la parte de abajo de esta sobraba en ese contexto, y meter mascara de señal para que si se mete otra señal que no sea la de Control C esta se ignore.
-[ ] Meter una estructura de datos para guardar los PID de los procesos hijo para su correcta defuncion una vez se haya finalizado el uso de estos, los tiene que matar el proceso padre.
-[ ] Al proceso padre se le deberia de poder matar cuando este se queda pillado.
-[ ] En la funcion que hay un while(1), en la creacion de los procesos choferes, en vez de while hacer para que se ejecute mientras se reciba una señal.
